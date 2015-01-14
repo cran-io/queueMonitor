@@ -5,7 +5,7 @@
 
 #define CRANIO_LIVE
 
-//#define CRANIO_RPI
+#define CRANIO_RPI
 #ifdef CRANIO_RPI
 #include "ofxRPiCameraVideoGrabber.h"
 #endif

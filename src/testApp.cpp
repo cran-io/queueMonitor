@@ -34,7 +34,7 @@ void testApp::setup(){
 #endif
     
     if(doPixels){
-        videoTexture.allocate(CAMERA_WIDTH, CAMERA_HEIGHT, GL_RGBA);
+        videoTexture.allocate(CAMERA_WIDTH, CAMERA_HEIGHT, GL_RGB);
     }
     
     colorImg.allocate(CAMERA_WIDTH, CAMERA_HEIGHT);
@@ -61,7 +61,7 @@ void testApp::update(){
 
 	if(video.isFrameNew()){
 		if(doReloadPixels)
-            videoTexture.loadData(video.getPixels(), video.getWidth(), video.getHeight(), GL_RGBA);
+            videoTexture.loadData(video.getPixels(), video.getWidth(), video.getHeight(), GL_RGB);
         
         colorImg.setFromPixels(video.getPixels(), video.getWidth(), video.getHeight());
         
@@ -90,7 +90,7 @@ void testApp::draw(){
 #endif
 	if(doPixels && doReloadPixels)
 	{
-		video.draw(0, 0, CAMERA_WIDTH/2, CAMERA_HEIGHT/2);
+		videoTexture.draw(0, 0, CAMERA_WIDTH/2, CAMERA_HEIGHT/2);
 	}
     
     // draw the incoming, the grayscale, the bg and the thresholded difference
