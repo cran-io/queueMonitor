@@ -2,13 +2,17 @@
 
 #include "ofMain.h"
 #include "ofxOpenCv.h"
+#include "ofxCv.h"
 
-#define CRANIO_LIVE
+#ifdef TARGET_LINUX
+	#define CRANIO_RPI
+#endif
 
-#define CRANIO_RPI
 #ifdef CRANIO_RPI
 #include "ofxRPiCameraVideoGrabber.h"
 #endif
+
+#define CRANIO_LIVE
 
 #define CAMERA_WIDTH 320
 #define CAMERA_HEIGHT 240
@@ -55,5 +59,8 @@ class testApp : public ofBaseApp{
     
     int 				threshold;
     bool				bLearnBakground;
+
+	ofxCv::RunningBackground background;
+	ofImage thresholded;
 		
 };

@@ -45,6 +45,8 @@ void testApp::setup(){
 	bLearnBakground = true;
 	threshold = 80;
     
+	background.setLearningTime(900);
+	background.setThresholdValue(threshold);
     
     ofSetVerticalSync(true);
 }
@@ -60,6 +62,11 @@ void testApp::update(){
 	}
 
 	if(video.isFrameNew()){
+
+		background.update(video, thresholded);
+		thresholded.update();
+		//background.getBackground();
+
 		if(doReloadPixels)
             videoTexture.loadData(video.getPixels(), video.getWidth(), video.getHeight(), GL_RGB);
         
@@ -99,6 +106,8 @@ void testApp::draw(){
 	grayImage.draw(340,400,320,240);
 	grayDiff.draw(670,400,320,240);
     contourFinder.draw(670,400,320,240);
+
+	thresholded.draw(670,10,320,240);
     
 	stringstream info;
 	info << "APP FPS: " << ofGetFrameRate() << "\n";
@@ -108,7 +117,7 @@ void testApp::draw(){
 	info << "PIXELS RELOADING ENABLED: " << doReloadPixels << "\n";	
 	info << "\n";
     info << "Press space to capture background" << "\n";
-    info << "Threshold " << threshold << " (press: +/-)" << "\n";
+    info << "Threshold " << threshold << " (press: UP/DOWN)" << "\n";
 	info << "Press p to Toggle pixel processing" << "\n";
 	info << "Press r to Toggle pixel reloading" << "\n";
 	info << "Press g to Toggle info" << "\n";
@@ -146,15 +155,17 @@ void testApp::keyPressed(int key){
     if (key == ' ') {
         bLearnBakground = true;
 	}
-	if (key == '+') {
+	if (key == OF_KEY_UP) {
         threshold ++;
         if (threshold > 255)
             threshold = 255;
+		background.setThresholdValue(threshold);
 	}
-	if (key == '-') {
+	if (key == OF_KEY_DOWN) {
         threshold --;
         if (threshold < 0)
             threshold = 0;
+		background.setThresholdValue(threshold);
 	}
 
 }
