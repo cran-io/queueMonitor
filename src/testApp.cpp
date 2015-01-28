@@ -1,14 +1,14 @@
 #include "testApp.h"
 
+#define SKIP_FRAMES 10
 //--------------------------------------------------------------
 void testApp::setup(){
     
     ofSetLogLevel(OF_LOG_VERBOSE);
 	ofSetLogLevel("ofThread", OF_LOG_ERROR);
     doDrawInfo	= true;
-    doPixels = true;
-	doReloadPixels = true;
-
+	doPixels = true;
+	doDebug = true;
 #ifdef CRANIO_LIVE
 #ifdef CRANIO_RPI
 	OMXCameraSettings omxCameraSettings;
@@ -23,31 +23,34 @@ void testApp::setup(){
 	video.setup(omxCameraSettings);
 #else
     video.setVerbose(true);
-    video.setDeviceID(0);
+    video.setDeviceID(1);
     video.setDesiredFrameRate(CAMERA_FPS);
     video.setUseTexture(true);
     video.initGrabber(CAMERA_WIDTH, CAMERA_HEIGHT);
 #endif
 #else
     video.loadMovie("test.mov");
+	video.setLoopState(OF_LOOP_NORMAL);
     video.play();
 #endif
     
-    if(doPixels){
-        videoTexture.allocate(CAMERA_WIDTH, CAMERA_HEIGHT, GL_RGB);
-    }
+	threshold = 100;
     
-    colorImg.allocate(CAMERA_WIDTH, CAMERA_HEIGHT);
-	grayImage.allocate(CAMERA_WIDTH, CAMERA_HEIGHT);
-	grayBg.allocate(CAMERA_WIDTH, CAMERA_HEIGHT);
-	grayDiff.allocate(CAMERA_WIDTH, CAMERA_HEIGHT);
-    
-	bLearnBakground = true;
-	threshold = 80;
-    
-	background.setLearningTime(900);
+	background.setLearningTime(1000);
 	background.setThresholdValue(threshold);
+	
+	frame.allocate(CAMERA_WIDTH,CAMERA_HEIGHT);
+	thresholded.allocate(CAMERA_WIDTH,CAMERA_HEIGHT);
+	mask.allocate(CAMERA_WIDTH,CAMERA_HEIGHT);
+
+	imgBackground.allocate(CAMERA_WIDTH,CAMERA_HEIGHT,OF_IMAGE_COLOR);
+
+	descriptor.setSVMDetector(ofxCv::HOGDescriptor::getDefaultPeopleDetector());
+	//descriptor.checkDetectorSize();
+
+	skip=SKIP_FRAMES;
     
+	ofEnableAlphaBlending();
     ofSetVerticalSync(true);
 }
 
@@ -56,85 +59,113 @@ void testApp::update(){
 #ifndef CRANIO_RPI
     video.update();
 #endif
-    
-    if (!doPixels){
+
+	if(!doPixels){
 		return;
 	}
 
 	if(video.isFrameNew()){
+		frame.setFromPixels(video.getPixels(),video.getWidth(),video.getHeight());
+		background.update(ofxCv::toCv(frame), ofxCv::toCv(thresholded));
+		
+		thresholded.erode(4);
+		thresholded.dilate(10);
+		thresholded.blur(20);
 
-		background.update(video, thresholded);
-		thresholded.update();
-		//background.getBackground();
+		mask=thresholded;
+		frame&=mask;
+		
+		imgThresholded.setFromPixels(thresholded.getPixelsRef());
 
-		if(doReloadPixels)
-            videoTexture.loadData(video.getPixels(), video.getWidth(), video.getHeight(), GL_RGB);
-        
-        colorImg.setFromPixels(video.getPixels(), video.getWidth(), video.getHeight());
-        
-        grayImage = colorImg;
-		if (bLearnBakground == true){
-			grayBg = grayImage;		// the = sign copys the pixels from grayImage into grayBg (operator overloading)
-			bLearnBakground = false;
+		if(doDebug){
+			frame.updateTexture();
+			thresholded.updateTexture();
+			ofxCv::toOf(background.getBackground(),imgBackground);
+			imgBackground.update();
 		}
-        
-		// take the abs value of the difference between background and incoming and then threshold:
-		grayDiff.absDiff(grayBg, grayImage);
-		grayDiff.threshold(threshold);
-        
+
 		// find contours which are between the size of 20 pixels and 1/3 the w*h pixels.
 		// also, find holes is set to true so we will get interior contours as well....
-		contourFinder.findContours(grayDiff, 20, (CAMERA_WIDTH*CAMERA_HEIGHT)/3, 10, true);	// find holes
+		contourFinder.findContours(thresholded, 20, (CAMERA_WIDTH*CAMERA_HEIGHT)/3, 10, false);	// dont find holes
+		
+		if(skip<=0){
+			vector<ofxCv::Rect> found;
+			descriptor.detectMultiScale(ofxCv::toCv(frame), found, 0, ofxCv::Size(8,8), ofxCv::Size(32,32),1.05,2);
+
+			findings.clear();
+			for (int i=0; i<found.size(); i++){
+				ofxCv::Rect r = found[i];
+				int j=0;
+				for (j=0; j<found.size(); j++)
+					if (j!=i && (r & found[j])==r)
+						break;
+				if (j==found.size())
+					findings.push_back(r);
+			}
+			skip=SKIP_FRAMES;
+		}
+		else
+			skip--;
 	}
 }
 
 //--------------------------------------------------------------
 void testApp::draw(){
+	ofPushMatrix();
+	ofScale(DRAW_SCALE,DRAW_SCALE);
 #ifdef CRANIO_RPI
     video.draw();
 #else
     video.draw(0,0);
 #endif
-	if(doPixels && doReloadPixels)
-	{
-		videoTexture.draw(0, 0, CAMERA_WIDTH/2, CAMERA_HEIGHT/2);
-	}
-    
-    // draw the incoming, the grayscale, the bg and the thresholded difference
-	//colorImg.draw(20,20);
-    grayBg.draw(10,400,320,240);
-	grayImage.draw(340,400,320,240);
-	grayDiff.draw(670,400,320,240);
-    contourFinder.draw(670,400,320,240);
+	if(doPixels && doDebug){
+		// draw the incoming, the grayscale, the bg and the thresholded difference
+		imgBackground.draw(CAMERA_WIDTH,0);
+		
+		//thresholded.draw(670,10,320,240);
+		imgThresholded.draw(0,CAMERA_HEIGHT);
+		contourFinder.draw(0,CAMERA_HEIGHT);
 
-	thresholded.draw(670,10,320,240);
-    
+		frame.draw(CAMERA_WIDTH,CAMERA_HEIGHT);
+
+		ofPushStyle();
+		ofNoFill();
+		ofPushMatrix();
+		ofTranslate(CAMERA_WIDTH,CAMERA_HEIGHT);
+		for (int i=0; i<findings.size(); i++){
+			ofxCv::Rect r = findings[i];
+			ofRect(r.x,r.y,r.width,r.height);
+		}
+		ofPopMatrix();
+		ofPopStyle();
+	}
+    ofPopMatrix();
+
 	stringstream info;
 	info << "APP FPS: " << ofGetFrameRate() << "\n";
 	info << "Camera Resolution: " << video.getWidth() << "x" << video.getHeight()	<< " @ "<< CAMERA_FPS <<"FPS"<< "\n";
     info << "BLOBS: " << contourFinder.nBlobs << "\n";
-	info << "PIXELS ENABLED: " << doPixels << "\n";
-	info << "PIXELS RELOADING ENABLED: " << doReloadPixels << "\n";	
+	info << "PIXELS ENABLED: " << doPixels << "\n";	
 	info << "\n";
     info << "Press space to capture background" << "\n";
     info << "Threshold " << threshold << " (press: UP/DOWN)" << "\n";
 	info << "Press p to Toggle pixel processing" << "\n";
 	info << "Press r to Toggle pixel reloading" << "\n";
 	info << "Press g to Toggle info" << "\n";
-	if (doDrawInfo)
-	{
-		ofDrawBitmapStringHighlight(info.str(), 1000, 420, ofColor::black, ofColor::yellow);
+	if (doDrawInfo){
+		ofDrawBitmapStringHighlight(info.str(), 0, 2*CAMERA_HEIGHT*DRAW_SCALE+20, ofColor::black, ofColor::yellow);
 	}
 }
 
 //--------------------------------------------------------------
 void testApp::keyPressed(int key){
     
-    if (key == 'g')
-	{
+    if (key == 'g'){
 		doDrawInfo = !doDrawInfo;
 	}
-	
+	if (key == 'd'){
+		doDebug = !doDebug;
+	}	
 	if (key == 'p')
 	{
 		doPixels = !doPixels;
@@ -148,12 +179,9 @@ void testApp::keyPressed(int key){
 		}
 #endif
 	}
-	if (key == 'r') {
-		doReloadPixels = !doReloadPixels;
-	}
     
     if (key == ' ') {
-        bLearnBakground = true;
+        background.reset();
 	}
 	if (key == OF_KEY_UP) {
         threshold ++;

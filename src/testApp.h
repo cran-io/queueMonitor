@@ -12,11 +12,13 @@
 #include "ofxRPiCameraVideoGrabber.h"
 #endif
 
-#define CRANIO_LIVE
+//#define CRANIO_LIVE
 
-#define CAMERA_WIDTH 320
-#define CAMERA_HEIGHT 240
+#define CAMERA_WIDTH 640
+#define CAMERA_HEIGHT 360
 #define CAMERA_FPS 30
+
+#define DRAW_SCALE 0.75
 
 class testApp : public ofBaseApp{
 
@@ -45,22 +47,21 @@ class testApp : public ofBaseApp{
 #endif
     
     bool doDrawInfo;
-    ofTexture videoTexture;
     bool doPixels;
-    bool doReloadPixels;
-    
-    ofxCvColorImage			colorImg;
-    
-    ofxCvGrayscaleImage 	grayImage;
-    ofxCvGrayscaleImage 	grayBg;
-    ofxCvGrayscaleImage 	grayDiff;
+	bool doDebug;
     
     ofxCvContourFinder 	contourFinder;
     
     int 				threshold;
-    bool				bLearnBakground;
 
-	ofxCv::RunningBackground background;
-	ofImage thresholded;
-		
+	ofxCv::RunningBackground	background;
+	ofxCvColorImage				frame;
+	ofxCvGrayscaleImage			thresholded;
+	ofxCvColorImage				mask;
+	ofImage imgThresholded;
+	ofImage imgBackground;
+	
+	ofxCv::HOGDescriptor descriptor;
+	vector<ofxCv::Rect> findings;
+	int skip;
 };
