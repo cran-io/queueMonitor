@@ -12,7 +12,7 @@
 #include "ofxRPiCameraVideoGrabber.h"
 #endif
 
-//#define CRANIO_LIVE
+#define CRANIO_LIVE
 
 #define CAMERA_WIDTH 640
 #define CAMERA_HEIGHT 360
@@ -60,8 +60,6 @@ class testApp : public ofBaseApp{
 	ofxCvColorImage				mask;
 	ofImage imgThresholded;
 	ofImage imgBackground;
-	
-	ofxCv::HOGDescriptor descriptor;
-	vector<ofxCv::Rect> findings;
-	int skip;
+
+	int lastBlobCount;
 };

@@ -45,10 +45,7 @@ void testApp::setup(){
 
 	imgBackground.allocate(CAMERA_WIDTH,CAMERA_HEIGHT,OF_IMAGE_COLOR);
 
-	descriptor.setSVMDetector(ofxCv::HOGDescriptor::getDefaultPeopleDetector());
-	//descriptor.checkDetectorSize();
-
-	skip=SKIP_FRAMES;
+	lastBlobCount=0;
     
 	ofEnableAlphaBlending();
     ofSetVerticalSync(true);
@@ -68,9 +65,9 @@ void testApp::update(){
 		frame.setFromPixels(video.getPixels(),video.getWidth(),video.getHeight());
 		background.update(ofxCv::toCv(frame), ofxCv::toCv(thresholded));
 		
-		thresholded.erode(4);
+		thresholded.erode(5);
 		thresholded.dilate(10);
-		thresholded.blur(20);
+		thresholded.blur(21);
 
 		mask=thresholded;
 		frame&=mask;
@@ -84,28 +81,13 @@ void testApp::update(){
 			imgBackground.update();
 		}
 
-		// find contours which are between the size of 20 pixels and 1/3 the w*h pixels.
-		// also, find holes is set to true so we will get interior contours as well....
-		contourFinder.findContours(thresholded, 20, (CAMERA_WIDTH*CAMERA_HEIGHT)/3, 10, false);	// dont find holes
-		
-		if(skip<=0){
-			vector<ofxCv::Rect> found;
-			descriptor.detectMultiScale(ofxCv::toCv(frame), found, 0, ofxCv::Size(8,8), ofxCv::Size(32,32),1.05,2);
-
-			findings.clear();
-			for (int i=0; i<found.size(); i++){
-				ofxCv::Rect r = found[i];
-				int j=0;
-				for (j=0; j<found.size(); j++)
-					if (j!=i && (r & found[j])==r)
-						break;
-				if (j==found.size())
-					findings.push_back(r);
-			}
-			skip=SKIP_FRAMES;
+		// find contours which are between the size of 1/50 and 1/3 the w*h pixels.
+		// also, find holes is set to false so we will not get interior contours.
+		contourFinder.findContours(thresholded, (CAMERA_WIDTH*CAMERA_HEIGHT)/50, (CAMERA_WIDTH*CAMERA_HEIGHT)/3, 10, false);	// dont find holes
+		if(contourFinder.nBlobs!=lastBlobCount){
+			cout<<ofGetTimestampString()<<": "<<contourFinder.nBlobs<<endl;
+			lastBlobCount=contourFinder.nBlobs;
 		}
-		else
-			skip--;
 	}
 }
 
@@ -127,17 +109,6 @@ void testApp::draw(){
 		contourFinder.draw(0,CAMERA_HEIGHT);
 
 		frame.draw(CAMERA_WIDTH,CAMERA_HEIGHT);
-
-		ofPushStyle();
-		ofNoFill();
-		ofPushMatrix();
-		ofTranslate(CAMERA_WIDTH,CAMERA_HEIGHT);
-		for (int i=0; i<findings.size(); i++){
-			ofxCv::Rect r = findings[i];
-			ofRect(r.x,r.y,r.width,r.height);
-		}
-		ofPopMatrix();
-		ofPopStyle();
 	}
     ofPopMatrix();
 
