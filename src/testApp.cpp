@@ -36,7 +36,8 @@ void testApp::setup(){
     
 	threshold = 100;
     
-	background.setLearningTime(1000);
+	background.setLearningTime(10000);
+	background.setLearningRate(0.0001); //default value
 	background.setThresholdValue(threshold);
 	
 	frame.allocate(CAMERA_WIDTH,CAMERA_HEIGHT);
