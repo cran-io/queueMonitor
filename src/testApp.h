@@ -62,4 +62,14 @@ class testApp : public ofBaseApp{
 	ofImage imgBackground;
 
 	int lastBlobCount;
+	int lastPeopleDetection;
+
+	int peopleCount;
+
+	float preLimitDensity;
+	int lastPreLimitOccupation;
+	float postLimitDensity;
+	int lastPostLimitOccupation;
+
+	bool queueFull;
 };

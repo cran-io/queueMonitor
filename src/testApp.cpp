@@ -1,6 +1,30 @@
 #include "testApp.h"
 
-#define SKIP_FRAMES 10
+#define PERSISTENCE_THRESHOLD 10
+#define PRELIMIT_DENSITY_THRESHOLD 0.4
+
+#define POSTLIMIT_DENSITY_THRESHOLD 0.2
+#define PRELIMIT_DENSITY_THRESHOLD_ALT 0.2
+
+bool persistenceCalculation(bool condition,int& last, int threshold){
+	if(condition){
+		if(last<threshold){
+			last++;
+			if(last>=threshold)
+				return true;
+		}
+	}
+	else{
+		if(last){
+			last-=2;
+			if(last<=0){
+				last=0;
+			}
+		}
+	}
+	return false;
+}
+
 //--------------------------------------------------------------
 void testApp::setup(){
     
@@ -47,6 +71,16 @@ void testApp::setup(){
 	imgBackground.allocate(CAMERA_WIDTH,CAMERA_HEIGHT,OF_IMAGE_COLOR);
 
 	lastBlobCount=0;
+	lastPeopleDetection=0;
+
+	peopleCount=0;
+
+	preLimitDensity=0;
+	lastPreLimitOccupation=0;
+	postLimitDensity=0;
+	lastPostLimitOccupation=0;
+
+	queueFull=false;
     
 	ofEnableAlphaBlending();
     ofSetVerticalSync(true);
@@ -89,11 +123,63 @@ void testApp::update(){
 			cout<<ofGetTimestampString()<<": "<<contourFinder.nBlobs<<endl;
 			lastBlobCount=contourFinder.nBlobs;
 		}
+
+		if(contourFinder.nBlobs){
+			vector<ofxCvBlob>  blobs = contourFinder.blobs;
+			ofPoint center(CAMERA_WIDTH/2,CAMERA_HEIGHT/2);
+			bool peopleDetection = false;
+			for(int i=0; i<blobs.size(); i++){
+				if(blobs[i].boundingRect.inside(center)){
+					peopleDetection=true;
+					break;
+				}
+			}
+			if(persistenceCalculation(peopleDetection,lastPeopleDetection,PERSISTENCE_THRESHOLD))
+				peopleCount++;
+		}
+		int width=thresholded.getWidth();
+		int height=thresholded.getHeight();
+		unsigned char * pixels = thresholded.getPixels();
+		long preLimitOccupation=0;
+		for(int y=0;y<height;y++){
+			for(int x=width/2;x<width;x++){
+				preLimitOccupation+=pixels[x+y*width];
+			}
+		}
+		preLimitOccupation/=255;
+		preLimitDensity=preLimitOccupation/(height*width*0.5);
+
+		long postLimitOccupation=0;
+		for(int y=0;y<height;y++){
+			for(int x=0;x<width/2;x++){
+				postLimitOccupation+=pixels[x+y*width];
+			}
+		}
+		postLimitOccupation/=255;
+		postLimitDensity=postLimitOccupation/(height*width*0.5);
+
+		persistenceCalculation(preLimitDensity>PRELIMIT_DENSITY_THRESHOLD,lastPreLimitOccupation,PERSISTENCE_THRESHOLD);
+		
+		persistenceCalculation(postLimitDensity>POSTLIMIT_DENSITY_THRESHOLD,lastPostLimitOccupation,PERSISTENCE_THRESHOLD);
+
+		if(lastPreLimitOccupation>=PERSISTENCE_THRESHOLD && lastPeopleDetection>=PERSISTENCE_THRESHOLD){
+			queueFull=true;
+		}
+		else if(lastPostLimitOccupation>=PERSISTENCE_THRESHOLD && preLimitDensity>=PRELIMIT_DENSITY_THRESHOLD_ALT){
+			queueFull=true;
+		}
+		else{
+			queueFull=false;
+		}
 	}
 }
 
 //--------------------------------------------------------------
 void testApp::draw(){
+	if(queueFull)
+		ofBackground(255,0,0);
+	else
+		ofBackground(125);
 	ofPushMatrix();
 	ofScale(DRAW_SCALE,DRAW_SCALE);
 #ifdef CRANIO_RPI
@@ -110,6 +196,20 @@ void testApp::draw(){
 		contourFinder.draw(0,CAMERA_HEIGHT);
 
 		frame.draw(CAMERA_WIDTH,CAMERA_HEIGHT);
+
+		ofPushStyle();
+		ofSetColor(0,100,255);
+		ofLine(CAMERA_WIDTH/2,0,CAMERA_WIDTH/2,CAMERA_HEIGHT);
+		ofLine(CAMERA_WIDTH+CAMERA_WIDTH/2,0,CAMERA_WIDTH+CAMERA_WIDTH/2,CAMERA_HEIGHT);
+		ofLine(CAMERA_WIDTH/2,CAMERA_HEIGHT,CAMERA_WIDTH/2,CAMERA_HEIGHT+CAMERA_HEIGHT);
+		ofLine(CAMERA_WIDTH+CAMERA_WIDTH/2,CAMERA_HEIGHT,CAMERA_WIDTH+CAMERA_WIDTH/2,CAMERA_HEIGHT+CAMERA_HEIGHT);
+		ofSetColor(255,0,0);
+		ofCircle(CAMERA_WIDTH/2,CAMERA_HEIGHT/2,10);
+		ofCircle(CAMERA_WIDTH+CAMERA_WIDTH/2,CAMERA_HEIGHT/2,10);
+		ofCircle(CAMERA_WIDTH/2,CAMERA_HEIGHT+CAMERA_HEIGHT/2,10);
+		ofCircle(CAMERA_WIDTH+CAMERA_WIDTH/2,CAMERA_HEIGHT+CAMERA_HEIGHT/2,10);
+		ofPopStyle();
+
 	}
     ofPopMatrix();
 
@@ -117,7 +217,9 @@ void testApp::draw(){
 	info << "APP FPS: " << ofGetFrameRate() << "\n";
 	info << "Camera Resolution: " << video.getWidth() << "x" << video.getHeight()	<< " @ "<< CAMERA_FPS <<"FPS"<< "\n";
     info << "BLOBS: " << contourFinder.nBlobs << "\n";
-	info << "PIXELS ENABLED: " << doPixels << "\n";	
+	info << "PEOPLE COUNT: " << peopleCount << "\n";
+	info << "DENSITY: Post: " << postLimitDensity << ", Pre: " << preLimitDensity << "\n";
+	info << "QUEUE FULL: " << queueFull << "\n";
 	info << "\n";
     info << "Press space to capture background" << "\n";
     info << "Threshold " << threshold << " (press: UP/DOWN)" << "\n";
