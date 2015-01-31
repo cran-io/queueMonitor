@@ -1,3 +1,4 @@
 ofxOpenCv
+ofxBlobTracker
 ofxCv
 ofxRPiCameraVideoGrabber

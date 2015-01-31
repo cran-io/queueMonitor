@@ -58,7 +58,7 @@ void testApp::setup(){
     video.play();
 #endif
     
-	threshold = 100;
+	threshold = 50;
     
 	background.setLearningTime(10000);
 	background.setLearningRate(0.0001); //default value
@@ -70,15 +70,34 @@ void testApp::setup(){
 
 	imgBackground.allocate(CAMERA_WIDTH,CAMERA_HEIGHT,OF_IMAGE_COLOR);
 
+	ofAddListener(blobTracker.blobAdded, this, &testApp::blobAdded);
+    ofAddListener(blobTracker.blobMoved, this, &testApp::blobMoved);
+    ofAddListener(blobTracker.blobDeleted, this, &testApp::blobDeleted);
+
 	lastBlobCount=0;
 	lastPeopleDetection=0;
 
 	peopleCount=0;
 
+	limitTop.set(CAMERA_WIDTH/2,0);
+	limitBottom.set(CAMERA_WIDTH/2,CAMERA_HEIGHT);
+
+	preLimit.vertex.push_back(ofPoint(CAMERA_WIDTH,0));
+	preLimit.vertex.push_back(ofPoint(CAMERA_WIDTH,CAMERA_HEIGHT));
+
+	postLimit.vertex.push_back(ofPoint(0,0));
+	postLimit.vertex.push_back(ofPoint(0,CAMERA_HEIGHT));
+
 	preLimitDensity=0;
 	lastPreLimitOccupation=0;
+	preLimitMask.allocate(CAMERA_WIDTH,CAMERA_HEIGHT,OF_IMAGE_GRAYSCALE);
 	postLimitDensity=0;
 	lastPostLimitOccupation=0;
+	postLimitMask.allocate(CAMERA_WIDTH,CAMERA_HEIGHT,OF_IMAGE_GRAYSCALE);
+
+	loadLimits();
+
+	makeLimitMask();
 
 	queueFull=false;
     
@@ -118,18 +137,17 @@ void testApp::update(){
 
 		// find contours which are between the size of 1/50 and 1/3 the w*h pixels.
 		// also, find holes is set to false so we will not get interior contours.
-		contourFinder.findContours(thresholded, (CAMERA_WIDTH*CAMERA_HEIGHT)/50, (CAMERA_WIDTH*CAMERA_HEIGHT)/3, 10, false);	// dont find holes
-		if(contourFinder.nBlobs!=lastBlobCount){
-			cout<<ofGetTimestampString()<<": "<<contourFinder.nBlobs<<endl;
-			lastBlobCount=contourFinder.nBlobs;
+		blobTracker.update(thresholded, (CAMERA_WIDTH*CAMERA_HEIGHT)/50, (CAMERA_WIDTH*CAMERA_HEIGHT)/3, 10, false);	// dont find holes
+		if(blobTracker.size()!=lastBlobCount){
+			cout<<ofGetTimestampString()<<": "<<blobTracker.size()<<endl;
+			lastBlobCount=blobTracker.size();
 		}
 
-		if(contourFinder.nBlobs){
-			vector<ofxCvBlob>  blobs = contourFinder.blobs;
-			ofPoint center(CAMERA_WIDTH/2,CAMERA_HEIGHT/2);
+		if(blobTracker.size()){
+			ofPoint limitMidpointNormalized(limitMidpoint.x/CAMERA_WIDTH,limitMidpoint.y/CAMERA_HEIGHT);
 			bool peopleDetection = false;
-			for(int i=0; i<blobs.size(); i++){
-				if(blobs[i].boundingRect.inside(center)){
+			for(int i=0; i<blobTracker.size(); i++){
+				if(blobTracker[i].boundingRect.inside(limitMidpointNormalized)){
 					peopleDetection=true;
 					break;
 				}
@@ -139,24 +157,28 @@ void testApp::update(){
 		}
 		int width=thresholded.getWidth();
 		int height=thresholded.getHeight();
-		unsigned char * pixels = thresholded.getPixels();
+		unsigned char * framePixels = thresholded.getPixels();
+		unsigned char * preLimitMaskPixels = preLimitMask.getPixels();
 		long preLimitOccupation=0;
-		for(int y=0;y<height;y++){
-			for(int x=width/2;x<width;x++){
-				preLimitOccupation+=pixels[x+y*width];
+		for(int y=preLimit.minY;y<preLimit.maxY;y++){
+			for(int x=preLimit.minX;x<preLimit.maxX;x++){
+				if(preLimitMaskPixels[x+y*width])
+					preLimitOccupation+=framePixels[x+y*width];
 			}
 		}
 		preLimitOccupation/=255;
-		preLimitDensity=preLimitOccupation/(height*width*0.5);
+		preLimitDensity=preLimitOccupation/(float)preLimit.pixelCount;
 
+		unsigned char * postLimitMaskPixels = postLimitMask.getPixels();
 		long postLimitOccupation=0;
-		for(int y=0;y<height;y++){
-			for(int x=0;x<width/2;x++){
-				postLimitOccupation+=pixels[x+y*width];
+		for(int y=postLimit.minY;y<postLimit.maxY;y++){
+			for(int x=postLimit.minX;x<postLimit.maxX;x++){
+				if(postLimitMaskPixels[x+y*width])
+					postLimitOccupation+=framePixels[x+y*width];
 			}
 		}
 		postLimitOccupation/=255;
-		postLimitDensity=postLimitOccupation/(height*width*0.5);
+		postLimitDensity=postLimitOccupation/(float)postLimit.pixelCount;
 
 		persistenceCalculation(preLimitDensity>PRELIMIT_DENSITY_THRESHOLD,lastPreLimitOccupation,PERSISTENCE_THRESHOLD);
 		
@@ -172,6 +194,21 @@ void testApp::update(){
 			queueFull=false;
 		}
 	}
+}
+
+//--------------------------------------------------------------
+void testApp::blobAdded(ofxBlob &_blob){
+    ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " added" );
+}
+
+//--------------------------------------------------------------
+void testApp::blobMoved(ofxBlob &_blob){
+    ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " moved" );
+}
+
+//--------------------------------------------------------------
+void testApp::blobDeleted(ofxBlob &_blob){
+    ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " deleted" );
 }
 
 //--------------------------------------------------------------
@@ -193,30 +230,19 @@ void testApp::draw(){
 		
 		//thresholded.draw(670,10,320,240);
 		imgThresholded.draw(0,CAMERA_HEIGHT);
-		contourFinder.draw(0,CAMERA_HEIGHT);
+		blobTracker.draw(0,CAMERA_HEIGHT);
 
 		frame.draw(CAMERA_WIDTH,CAMERA_HEIGHT);
-
-		ofPushStyle();
-		ofSetColor(0,100,255);
-		ofLine(CAMERA_WIDTH/2,0,CAMERA_WIDTH/2,CAMERA_HEIGHT);
-		ofLine(CAMERA_WIDTH+CAMERA_WIDTH/2,0,CAMERA_WIDTH+CAMERA_WIDTH/2,CAMERA_HEIGHT);
-		ofLine(CAMERA_WIDTH/2,CAMERA_HEIGHT,CAMERA_WIDTH/2,CAMERA_HEIGHT+CAMERA_HEIGHT);
-		ofLine(CAMERA_WIDTH+CAMERA_WIDTH/2,CAMERA_HEIGHT,CAMERA_WIDTH+CAMERA_WIDTH/2,CAMERA_HEIGHT+CAMERA_HEIGHT);
-		ofSetColor(255,0,0);
-		ofCircle(CAMERA_WIDTH/2,CAMERA_HEIGHT/2,10);
-		ofCircle(CAMERA_WIDTH+CAMERA_WIDTH/2,CAMERA_HEIGHT/2,10);
-		ofCircle(CAMERA_WIDTH/2,CAMERA_HEIGHT+CAMERA_HEIGHT/2,10);
-		ofCircle(CAMERA_WIDTH+CAMERA_WIDTH/2,CAMERA_HEIGHT+CAMERA_HEIGHT/2,10);
-		ofPopStyle();
-
 	}
+
+	drawAllZones();
+
     ofPopMatrix();
 
 	stringstream info;
 	info << "APP FPS: " << ofGetFrameRate() << "\n";
 	info << "Camera Resolution: " << video.getWidth() << "x" << video.getHeight()	<< " @ "<< CAMERA_FPS <<"FPS"<< "\n";
-    info << "BLOBS: " << contourFinder.nBlobs << "\n";
+    info << "BLOBS: " << blobTracker.size() << "\n";
 	info << "PEOPLE COUNT: " << peopleCount << "\n";
 	info << "DENSITY: Post: " << postLimitDensity << ", Pre: " << preLimitDensity << "\n";
 	info << "QUEUE FULL: " << queueFull << "\n";
@@ -228,6 +254,128 @@ void testApp::draw(){
 	info << "Press g to Toggle info" << "\n";
 	if (doDrawInfo){
 		ofDrawBitmapStringHighlight(info.str(), 0, 2*CAMERA_HEIGHT*DRAW_SCALE+20, ofColor::black, ofColor::yellow);
+	}
+}
+//--------------------------------------------------------------
+void testApp::drawAllZones(){
+	ofPushStyle();
+	ofPushMatrix();
+	ofTranslate(0,0);
+	ofNoFill();
+	drawZones();
+	ofPopMatrix();
+
+	ofPushMatrix();
+	ofTranslate(CAMERA_WIDTH,0);
+	ofFill();
+	drawZones();
+	ofPopMatrix();
+
+	ofPushMatrix();
+	ofTranslate(0,CAMERA_HEIGHT);
+	ofNoFill();
+	drawZones();
+	ofPopMatrix();
+
+	ofPushMatrix();
+	ofTranslate(CAMERA_WIDTH,CAMERA_HEIGHT);
+	ofNoFill();
+	drawZones();
+	ofPopMatrix();
+	ofPopStyle();
+}
+
+//--------------------------------------------------------------
+void testApp::drawZones(){
+	ofPushStyle();
+	ofSetColor(200,0,200,100);
+	ofSetPolyMode(OF_POLY_WINDING_ODD);	// this is the normal mode
+	ofBeginShape();
+		ofVertex(limitBottom);
+		ofVertex(limitTop);
+		ofVertex(preLimit.vertex[0]);
+		ofVertex(preLimit.vertex[1]);
+	ofEndShape(true);
+	ofSetColor(0,200,200,100);
+	ofSetPolyMode(OF_POLY_WINDING_ODD);	// this is the normal mode
+	ofBeginShape();
+		ofVertex(limitBottom);
+		ofVertex(limitTop);
+		ofVertex(postLimit.vertex[0]);
+		ofVertex(postLimit.vertex[1]);
+	ofEndShape(true);
+	ofSetColor(255,0,0,100);
+	ofCircle(limitTop,10);
+	ofCircle(limitBottom,10);
+	ofCircle(preLimit.vertex[0],10);
+	ofCircle(preLimit.vertex[1],10);
+	ofCircle(postLimit.vertex[0],10);
+	ofCircle(postLimit.vertex[1],10);
+	ofCircle(limitMidpoint,5);
+	ofPopStyle();
+}
+
+//--------------------------------------------------------------
+void testApp::makeLimitMask(){
+	limitMidpoint=limitTop+(limitBottom-limitTop)*0.5;
+
+	preLimit.minX=min(limitTop.x,limitBottom.x);
+	preLimit.maxX=max(preLimit.vertex[0].x,preLimit.vertex[1].x);
+	preLimit.minY=min(limitTop.y,preLimit.vertex[0].y);
+	preLimit.maxY=max(limitBottom.y,preLimit.vertex[1].y);
+
+	postLimit.maxX=max(limitTop.x,limitBottom.x);
+	postLimit.minX=min(postLimit.vertex[0].x,postLimit.vertex[1].x);
+	postLimit.minY=min(limitTop.y,postLimit.vertex[0].y);
+	postLimit.maxY=max(limitBottom.y,postLimit.vertex[1].y);
+
+	ofFbo tempFbo;
+	tempFbo.allocate(CAMERA_WIDTH,CAMERA_HEIGHT);
+
+	tempFbo.begin();
+	ofClear(0);
+	ofSetColor(255);
+	ofSetPolyMode(OF_POLY_WINDING_ODD);	// this is the normal mode
+	ofBeginShape();
+		ofVertex(limitBottom);
+		ofVertex(limitTop);
+		ofVertex(preLimit.vertex[0]);
+		ofVertex(preLimit.vertex[1]);
+	ofEndShape(true);
+	tempFbo.end();
+
+	tempFbo.readToPixels(preLimitMask);
+	preLimitMask.setImageType(OF_IMAGE_GRAYSCALE);
+
+	preLimit.pixelCount=0;
+	for(int y=preLimit.minY;y<preLimit.maxY;y++){
+		for(int x=preLimit.minX;x<preLimit.maxX;x++){
+			if(preLimitMask.getPixels()[x+y*preLimitMask.getWidth()])
+				preLimit.pixelCount++;
+		}
+	}
+	
+	tempFbo.begin();
+	ofClear(0);
+	ofSetColor(255);
+	ofSetPolyMode(OF_POLY_WINDING_ODD);	// this is the normal mode
+	ofBeginShape();
+		ofVertex(limitBottom);
+		ofVertex(limitTop);
+		ofVertex(postLimit.vertex[0]);
+		ofVertex(postLimit.vertex[1]);
+	ofEndShape(true);
+	tempFbo.end();
+
+	tempFbo.readToPixels(postLimitMask);
+	postLimitMask.setImageType(OF_IMAGE_GRAYSCALE);
+
+	postLimit.pixelCount=0;
+	for(int y=postLimit.minY;y<postLimit.maxY;y++){
+		for(int x=postLimit.minX;x<postLimit.maxX;x++){
+			if(postLimitMask.getPixels()[x+y*postLimitMask.getWidth()])
+				postLimit.pixelCount++;
+		}
 	}
 }
 
@@ -284,17 +432,47 @@ void testApp::mouseMoved(int x, int y ){
 
 //--------------------------------------------------------------
 void testApp::mouseDragged(int x, int y, int button){
-
+	ofPoint mouse(x/DRAW_SCALE-CAMERA_WIDTH,y/DRAW_SCALE);
+	if(dragginPoint==0)
+		limitBottom.set(mouse);
+	else if(dragginPoint==1)
+		limitTop.set(mouse);
+	else if(dragginPoint==2)
+		preLimit.vertex[0].set(mouse);
+	else if(dragginPoint==3)
+		preLimit.vertex[1].set(mouse);
+	else if(dragginPoint==4)
+		postLimit.vertex[0].set(mouse);
+	else if(dragginPoint==5)
+		postLimit.vertex[1].set(mouse);
 }
 
 //--------------------------------------------------------------
 void testApp::mousePressed(int x, int y, int button){
-
+	ofPoint mouse(x/DRAW_SCALE-CAMERA_WIDTH,y/DRAW_SCALE);
+	//cout<<limitBottom.distanceSquared(mouse)<<endl;
+	if(limitBottom.distanceSquared(mouse)<100)
+		dragginPoint=0;
+	else if(limitTop.distanceSquared(mouse)<100)
+		dragginPoint=1;
+	else if(preLimit.vertex[0].distanceSquared(mouse)<100)
+		dragginPoint=2;
+	else if(preLimit.vertex[1].distanceSquared(mouse)<100)
+		dragginPoint=3;
+	else if(postLimit.vertex[0].distanceSquared(mouse)<100)
+		dragginPoint=4;
+	else if(postLimit.vertex[1].distanceSquared(mouse)<100)
+		dragginPoint=5;
+	else
+		dragginPoint=-1;
 }
 
 //--------------------------------------------------------------
 void testApp::mouseReleased(int x, int y, int button){
-
+	if(dragginPoint>=0){
+		makeLimitMask();
+		dragginPoint=-1;
+	}
 }
 
 //--------------------------------------------------------------
@@ -310,4 +488,51 @@ void testApp::gotMessage(ofMessage msg){
 //--------------------------------------------------------------
 void testApp::dragEvent(ofDragInfo dragInfo){ 
 
+}
+
+//--------------------------------------------------------------
+void testApp::exit(){
+	saveLimits();
+}
+
+//--------------------------------------------------------------
+void testApp::loadLimits(){
+	if(ofFile::doesFileExist("0.limits")){
+		ofBuffer buf = ofBufferFromFile("0.limits");
+        string line = buf.getNextLine();
+		vector<string> p = ofSplitString(line, ",");
+        limitTop.set(ofPoint(ofToInt(p[0]),ofToInt(p[1])));
+
+		line = buf.getNextLine();
+		p = ofSplitString(line, ",");
+        limitBottom.set(ofPoint(ofToInt(p[0]),ofToInt(p[1])));
+
+		line = buf.getNextLine();
+		p = ofSplitString(line, ",");
+        preLimit.vertex[0].set(ofPoint(ofToInt(p[0]),ofToInt(p[1])));
+
+		line = buf.getNextLine();
+		p = ofSplitString(line, ",");
+        preLimit.vertex[1].set(ofPoint(ofToInt(p[0]),ofToInt(p[1])));
+
+		line = buf.getNextLine();
+		p = ofSplitString(line, ",");
+        postLimit.vertex[0].set(ofPoint(ofToInt(p[0]),ofToInt(p[1])));
+
+		line = buf.getNextLine();
+		p = ofSplitString(line, ",");
+        postLimit.vertex[1].set(ofPoint(ofToInt(p[0]),ofToInt(p[1])));
+	}
+}
+
+//--------------------------------------------------------------
+void testApp::saveLimits(){
+	ofBuffer buf;
+    buf.append(ofToString(limitTop)+"\n");
+	buf.append(ofToString(limitBottom)+"\n");
+	buf.append(ofToString(preLimit.vertex[0])+"\n");
+	buf.append(ofToString(preLimit.vertex[1])+"\n");
+	buf.append(ofToString(postLimit.vertex[0])+"\n");
+	buf.append(ofToString(postLimit.vertex[1])+"\n");
+    ofBufferToFile("0.limits",buf);
 }
