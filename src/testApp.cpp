@@ -10,6 +10,8 @@
 
 #define QUEUE_THRESHOLD 50
 
+#define LED0 7
+#define LED1 27
 
 bool persistenceCalculation(bool condition,int& last, int threshold){
 	if(condition){
@@ -52,6 +54,18 @@ void testApp::setup(){
 		omxCameraSettings.enablePixels = true;
 	}
 	video.setup(omxCameraSettings);
+
+	if(wiringPiSetup() == -1){
+        cout<<"Error on wiringPi setup"<<endl;
+    }
+    else{
+        cout<<"Success in wiringPi setup"<<endl;
+        pinMode(LED0,OUTPUT);
+        pinMode(LED1,OUTPUT);
+        digitalWrite(LED0,LOW);
+		digitalWrite(LED1,LOW);
+        ofSleepMillis(500);
+    }
 #else
     video.setVerbose(true);
     video.setDeviceID(1);
@@ -192,6 +206,11 @@ void testApp::update(){
 		}
 
 		queueFull=(queueCounter>QUEUE_THRESHOLD);
+
+#ifdef CRANIO_RPI
+		digitalWrite(LED0,queueFull?HIGHG:LOW);
+		digitalWrite(LED1,queueFull?HIGHG:LOW);
+#endif
 	}
 }
 
@@ -480,6 +499,11 @@ void testApp::dragEvent(ofDragInfo dragInfo){
 //--------------------------------------------------------------
 void testApp::exit(){
 	saveLimits();
+
+#ifdef CRANIO_RPI
+	digitalWrite(LED0,LOW);
+	digitalWrite(LED1,LOW);
+#endif
 }
 
 //--------------------------------------------------------------

@@ -11,6 +11,7 @@
 
 #ifdef CRANIO_RPI
 #include "ofxRPiCameraVideoGrabber.h"
+#include "wiringPi.h"
 #endif
 
 //#define CRANIO_LIVE
