@@ -61,7 +61,8 @@ class testApp : public ofBaseApp{
     bool doPixels;
 	bool doDebug;
     
-    ofxBlobTracker		blobTracker;
+    ofxBlobTracker		blobsTracker;
+	ofxCvContourFinder  contourFinder;
     
     int 				threshold;
 
@@ -72,14 +73,9 @@ class testApp : public ofBaseApp{
 	ofImage imgThresholded;
 	ofImage imgBackground;
 
-	int lastBlobCount;
 	int lastPeopleDetection;
 
 	int peopleCount;
-
-	void blobAdded(ofxBlob &_blob);
-    void blobMoved(ofxBlob &_blob);
-    void blobDeleted(ofxBlob &_blob);
 
 	Area preLimit;
 	Area postLimit;

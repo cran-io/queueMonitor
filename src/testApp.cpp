@@ -25,6 +25,8 @@ bool persistenceCalculation(bool condition,int& last, int threshold){
 	return false;
 }
 
+ofPoint deletionZoneP1,deletionZoneP2;
+
 //--------------------------------------------------------------
 void testApp::setup(){
     
@@ -55,10 +57,11 @@ void testApp::setup(){
 #else
     video.loadMovie("test.mov");
 	video.setLoopState(OF_LOOP_NORMAL);
+	video.setVolume(0.0f);
     video.play();
 #endif
     
-	threshold = 50;
+	threshold = 35;
     
 	background.setLearningTime(10000);
 	background.setLearningRate(0.0001); //default value
@@ -70,11 +73,12 @@ void testApp::setup(){
 
 	imgBackground.allocate(CAMERA_WIDTH,CAMERA_HEIGHT,OF_IMAGE_COLOR);
 
-	ofAddListener(blobTracker.blobAdded, this, &testApp::blobAdded);
-    ofAddListener(blobTracker.blobMoved, this, &testApp::blobMoved);
-    ofAddListener(blobTracker.blobDeleted, this, &testApp::blobDeleted);
+	blobsTracker.normalizePercentage = 0.5;
+	blobsTracker.clearDeletionZones();
+	deletionZoneP1.set(CAMERA_WIDTH-CAMERA_WIDTH*0.15,0);
+	deletionZoneP2.set(CAMERA_WIDTH,CAMERA_HEIGHT);
+	blobsTracker.addDeletionZone(ofRectangle(deletionZoneP1,deletionZoneP2));
 
-	lastBlobCount=0;
 	lastPeopleDetection=0;
 
 	peopleCount=0;
@@ -103,6 +107,7 @@ void testApp::setup(){
     
 	ofEnableAlphaBlending();
     ofSetVerticalSync(true);
+	ofSetFrameRate(30);
 }
 
 //--------------------------------------------------------------
@@ -137,17 +142,13 @@ void testApp::update(){
 
 		// find contours which are between the size of 1/50 and 1/3 the w*h pixels.
 		// also, find holes is set to false so we will not get interior contours.
-		blobTracker.update(thresholded, (CAMERA_WIDTH*CAMERA_HEIGHT)/50, (CAMERA_WIDTH*CAMERA_HEIGHT)/3, 10, false);	// dont find holes
-		if(blobTracker.size()!=lastBlobCount){
-			cout<<ofGetTimestampString()<<": "<<blobTracker.size()<<endl;
-			lastBlobCount=blobTracker.size();
-		}
+		contourFinder.findContours(thresholded, (preLimit.pixelCount+postLimit.pixelCount)/10, postLimit.pixelCount+preLimit.pixelCount, 10, false);	// dont find holes
+		blobsTracker.update(contourFinder.blobs);
 
-		if(blobTracker.size()){
-			ofPoint limitMidpointNormalized(limitMidpoint.x/CAMERA_WIDTH,limitMidpoint.y/CAMERA_HEIGHT);
+		if(contourFinder.nBlobs){
 			bool peopleDetection = false;
-			for(int i=0; i<blobTracker.size(); i++){
-				if(blobTracker[i].boundingRect.inside(limitMidpointNormalized)){
+			for(int i=0; i<contourFinder.nBlobs; i++){
+				if(contourFinder.blobs[i].boundingRect.inside(limitMidpoint)){
 					peopleDetection=true;
 					break;
 				}
@@ -197,21 +198,6 @@ void testApp::update(){
 }
 
 //--------------------------------------------------------------
-void testApp::blobAdded(ofxBlob &_blob){
-    ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " added" );
-}
-
-//--------------------------------------------------------------
-void testApp::blobMoved(ofxBlob &_blob){
-    ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " moved" );
-}
-
-//--------------------------------------------------------------
-void testApp::blobDeleted(ofxBlob &_blob){
-    ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " deleted" );
-}
-
-//--------------------------------------------------------------
 void testApp::draw(){
 	if(queueFull)
 		ofBackground(255,0,0);
@@ -219,6 +205,7 @@ void testApp::draw(){
 		ofBackground(125);
 	ofPushMatrix();
 	ofScale(DRAW_SCALE,DRAW_SCALE);
+	ofSetColor(255);
 #ifdef CRANIO_RPI
     video.draw();
 #else
@@ -230,8 +217,8 @@ void testApp::draw(){
 		
 		//thresholded.draw(670,10,320,240);
 		imgThresholded.draw(0,CAMERA_HEIGHT);
-		blobTracker.draw(0,CAMERA_HEIGHT);
-
+		contourFinder.draw(0,CAMERA_HEIGHT);
+		blobsTracker.draw(0,CAMERA_HEIGHT);
 		frame.draw(CAMERA_WIDTH,CAMERA_HEIGHT);
 	}
 
@@ -242,8 +229,8 @@ void testApp::draw(){
 	stringstream info;
 	info << "APP FPS: " << ofGetFrameRate() << "\n";
 	info << "Camera Resolution: " << video.getWidth() << "x" << video.getHeight()	<< " @ "<< CAMERA_FPS <<"FPS"<< "\n";
-    info << "BLOBS: " << blobTracker.size() << "\n";
-	info << "PEOPLE COUNT: " << peopleCount << "\n";
+    info << "BLOBS: " << contourFinder.nBlobs << "\n";
+	info << "PEOPLE COUNT: " << blobsTracker.count << "\n";
 	info << "DENSITY: Post: " << postLimitDensity << ", Pre: " << preLimitDensity << "\n";
 	info << "QUEUE FULL: " << queueFull << "\n";
 	info << "\n";
@@ -288,7 +275,7 @@ void testApp::drawAllZones(){
 //--------------------------------------------------------------
 void testApp::drawZones(){
 	ofPushStyle();
-	ofSetColor(200,0,200,100);
+	ofSetColor(200,200,200,100);
 	ofSetPolyMode(OF_POLY_WINDING_ODD);	// this is the normal mode
 	ofBeginShape();
 		ofVertex(limitBottom);
@@ -304,7 +291,7 @@ void testApp::drawZones(){
 		ofVertex(postLimit.vertex[0]);
 		ofVertex(postLimit.vertex[1]);
 	ofEndShape(true);
-	ofSetColor(255,0,0,100);
+	ofSetColor(0,255,0,100);
 	ofCircle(limitTop,10);
 	ofCircle(limitBottom,10);
 	ofCircle(preLimit.vertex[0],10);
@@ -312,6 +299,8 @@ void testApp::drawZones(){
 	ofCircle(postLimit.vertex[0],10);
 	ofCircle(postLimit.vertex[1],10);
 	ofCircle(limitMidpoint,5);
+	ofSetColor(255,0,0,100);
+	ofRect(ofRectangle(deletionZoneP1,deletionZoneP2));
 	ofPopStyle();
 }
 
