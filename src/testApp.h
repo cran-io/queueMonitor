@@ -73,10 +73,6 @@ class testApp : public ofBaseApp{
 	ofImage imgThresholded;
 	ofImage imgBackground;
 
-	int lastPeopleDetection;
-
-	int peopleCount;
-
 	Area preLimit;
 	Area postLimit;
 	ofPoint limitTop,limitBottom,limitMidpoint;
@@ -84,16 +80,21 @@ class testApp : public ofBaseApp{
 	bool draggin;
 	int dragginPoint;
 
-	float preLimitDensity;
-	int lastPreLimitOccupation;
 	ofPixels preLimitMask;
-	float postLimitDensity;
-	int lastPostLimitOccupation;
+	float preLimitDensity;
 	ofPixels postLimitMask;
+	float postLimitDensity;
+	
+	int case1PreLimitOccupation;
+	int case1PostLimitOccupation;
+
+	int case2PreLimitOccupation;
+	int case2PostLimitOccupation;
 
 	void loadLimits();
 	void saveLimits();
 	void makeLimitMask();
 
+	int queueCounter;
 	bool queueFull;
 };

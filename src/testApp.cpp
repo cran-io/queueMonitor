@@ -1,10 +1,15 @@
 #include "testApp.h"
 
-#define PERSISTENCE_THRESHOLD 10
-#define PRELIMIT_DENSITY_THRESHOLD 0.4
+#define PERSISTENCE_THRESHOLD 30
 
-#define POSTLIMIT_DENSITY_THRESHOLD 0.2
-#define PRELIMIT_DENSITY_THRESHOLD_ALT 0.2
+#define CASE1_POSTLIMIT_DENSITY_THRESHOLD 0.1
+#define CASE1_PRELIMIT_DENSITY_THRESHOLD 0.4
+
+#define CASE2_POSTLIMIT_DENSITY_THRESHOLD 0.2
+#define CASE2_PRELIMIT_DENSITY_THRESHOLD 0.2
+
+#define QUEUE_THRESHOLD 50
+
 
 bool persistenceCalculation(bool condition,int& last, int threshold){
 	if(condition){
@@ -79,10 +84,6 @@ void testApp::setup(){
 	deletionZoneP2.set(CAMERA_WIDTH,CAMERA_HEIGHT);
 	blobsTracker.addDeletionZone(ofRectangle(deletionZoneP1,deletionZoneP2));
 
-	lastPeopleDetection=0;
-
-	peopleCount=0;
-
 	limitTop.set(CAMERA_WIDTH/2,0);
 	limitBottom.set(CAMERA_WIDTH/2,CAMERA_HEIGHT);
 
@@ -92,17 +93,22 @@ void testApp::setup(){
 	postLimit.vertex.push_back(ofPoint(0,0));
 	postLimit.vertex.push_back(ofPoint(0,CAMERA_HEIGHT));
 
-	preLimitDensity=0;
-	lastPreLimitOccupation=0;
 	preLimitMask.allocate(CAMERA_WIDTH,CAMERA_HEIGHT,OF_IMAGE_GRAYSCALE);
-	postLimitDensity=0;
-	lastPostLimitOccupation=0;
+	preLimitDensity=0;
 	postLimitMask.allocate(CAMERA_WIDTH,CAMERA_HEIGHT,OF_IMAGE_GRAYSCALE);
+	postLimitDensity=0;
+
+	case1PreLimitOccupation=0;
+	case1PostLimitOccupation=0;
+
+	case2PreLimitOccupation=0;
+	case2PostLimitOccupation=0;
 
 	loadLimits();
 
 	makeLimitMask();
 
+	queueCounter=0;
 	queueFull=false;
     
 	ofEnableAlphaBlending();
@@ -145,17 +151,6 @@ void testApp::update(){
 		contourFinder.findContours(thresholded, (preLimit.pixelCount+postLimit.pixelCount)/10, postLimit.pixelCount+preLimit.pixelCount, 10, false);	// dont find holes
 		blobsTracker.update(contourFinder.blobs);
 
-		if(contourFinder.nBlobs){
-			bool peopleDetection = false;
-			for(int i=0; i<contourFinder.nBlobs; i++){
-				if(contourFinder.blobs[i].boundingRect.inside(limitMidpoint)){
-					peopleDetection=true;
-					break;
-				}
-			}
-			if(persistenceCalculation(peopleDetection,lastPeopleDetection,PERSISTENCE_THRESHOLD))
-				peopleCount++;
-		}
 		int width=thresholded.getWidth();
 		int height=thresholded.getHeight();
 		unsigned char * framePixels = thresholded.getPixels();
@@ -181,19 +176,22 @@ void testApp::update(){
 		postLimitOccupation/=255;
 		postLimitDensity=postLimitOccupation/(float)postLimit.pixelCount;
 
-		persistenceCalculation(preLimitDensity>PRELIMIT_DENSITY_THRESHOLD,lastPreLimitOccupation,PERSISTENCE_THRESHOLD);
-		
-		persistenceCalculation(postLimitDensity>POSTLIMIT_DENSITY_THRESHOLD,lastPostLimitOccupation,PERSISTENCE_THRESHOLD);
+		persistenceCalculation(preLimitDensity>CASE1_PRELIMIT_DENSITY_THRESHOLD,case1PreLimitOccupation,PERSISTENCE_THRESHOLD);
+		persistenceCalculation(postLimitDensity>CASE1_POSTLIMIT_DENSITY_THRESHOLD,case1PostLimitOccupation,PERSISTENCE_THRESHOLD);
 
-		if(lastPreLimitOccupation>=PERSISTENCE_THRESHOLD && lastPeopleDetection>=PERSISTENCE_THRESHOLD){
-			queueFull=true;
-		}
-		else if(lastPostLimitOccupation>=PERSISTENCE_THRESHOLD && preLimitDensity>=PRELIMIT_DENSITY_THRESHOLD_ALT){
-			queueFull=true;
+		persistenceCalculation(preLimitDensity>CASE2_PRELIMIT_DENSITY_THRESHOLD,case2PreLimitOccupation,PERSISTENCE_THRESHOLD);
+		persistenceCalculation(postLimitDensity>CASE2_POSTLIMIT_DENSITY_THRESHOLD,case2PostLimitOccupation,PERSISTENCE_THRESHOLD);
+
+		if((case1PreLimitOccupation>=PERSISTENCE_THRESHOLD && case1PostLimitOccupation>=PERSISTENCE_THRESHOLD) || (case2PreLimitOccupation>=PERSISTENCE_THRESHOLD && case2PostLimitOccupation>=PERSISTENCE_THRESHOLD)){
+			if(queueCounter<(QUEUE_THRESHOLD*4))
+				queueCounter++;
 		}
 		else{
-			queueFull=false;
+			if(queueCounter>0)
+				queueCounter--;
 		}
+
+		queueFull=(queueCounter>QUEUE_THRESHOLD);
 	}
 }
 
@@ -232,7 +230,7 @@ void testApp::draw(){
     info << "BLOBS: " << contourFinder.nBlobs << "\n";
 	info << "PEOPLE COUNT: " << blobsTracker.count << "\n";
 	info << "DENSITY: Post: " << postLimitDensity << ", Pre: " << preLimitDensity << "\n";
-	info << "QUEUE FULL: " << queueFull << "\n";
+	info << "QUEUE COUNTER: " << queueCounter << "\n";
 	info << "\n";
     info << "Press space to capture background" << "\n";
     info << "Threshold " << threshold << " (press: UP/DOWN)" << "\n";
