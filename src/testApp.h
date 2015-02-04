@@ -14,13 +14,17 @@
 #include "wiringPi.h"
 #endif
 
-//#define CRANIO_LIVE
+#define CRANIO_LIVE
 
 #define CAMERA_WIDTH 640
 #define CAMERA_HEIGHT 360
 #define CAMERA_FPS 30
 
-#define DRAW_SCALE 0.75
+#define PROCESSING_SCALE 0.5
+#define PROCESSING_WIDTH (PROCESSING_SCALE*CAMERA_WIDTH)
+#define PROCESSING_HEIGHT (PROCESSING_SCALE*CAMERA_HEIGHT)
+
+#define DRAW_SCALE 1.0
 
 typedef struct Area{
 	vector<ofPoint> vertex;

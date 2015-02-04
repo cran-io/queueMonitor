@@ -208,8 +208,8 @@ void testApp::update(){
 		queueFull=(queueCounter>QUEUE_THRESHOLD);
 
 #ifdef CRANIO_RPI
-		digitalWrite(LED0,queueFull?HIGHG:LOW);
-		digitalWrite(LED1,queueFull?HIGHG:LOW);
+		digitalWrite(LED0,queueFull?HIGH:LOW);
+		digitalWrite(LED1,queueFull?HIGH:LOW);
 #endif
 	}
 }
