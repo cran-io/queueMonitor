@@ -60,6 +60,8 @@ class testApp : public ofBaseApp{
 #else
         ofVideoPlayer video;
 #endif
+
+	float time;
     
     bool doDrawInfo;
     bool doPixels;
@@ -102,4 +104,7 @@ class testApp : public ofBaseApp{
 
 	int queueCounter;
 	bool queueFull;
+
+	float waitForCamera;
+	float waitForBackground;
 };

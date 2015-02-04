@@ -82,8 +82,11 @@ void testApp::setup(){
     
 	threshold = 35;
     
+	waitForCamera=4.0; //seconds
+	waitForBackground=2.0; //seconds
+
 	background.setLearningTime(10000);
-	background.setLearningRate(0.0001); //default value
+	background.setLearningRate(0.0001);
 	background.setThresholdValue(threshold);
 	
 	cameraFrame.allocate(CAMERA_WIDTH,CAMERA_HEIGHT);
@@ -129,10 +132,16 @@ void testApp::setup(){
 	ofEnableAlphaBlending();
     ofSetVerticalSync(true);
 	ofSetFrameRate(30);
+
+	time=ofGetElapsedTimef();
 }
 
 //--------------------------------------------------------------
 void testApp::update(){
+	float t = ofGetElapsedTimef();
+	float dt = t - time;
+	time = t;
+
 #ifndef CRANIO_RPI
     video.update();
 #endif
@@ -213,6 +222,39 @@ void testApp::update(){
 		digitalWrite(LED0,queueFull?HIGH:LOW);
 		digitalWrite(LED1,queueFull?HIGH:LOW);
 #endif
+	}
+
+	if(waitForCamera){
+		waitForCamera-=dt;
+		if(waitForCamera<=0){
+			background.setLearningTime(200);
+			background.setLearningRate(0.05);
+#ifdef CRANIO_RPI
+			digitalWrite(LED0,LOW);
+#endif
+			waitForCamera=0;
+		}
+		else{
+#ifdef CRANIO_RPI
+			digitalWrite(LED0,(((int)waitForCamera)%2)?HIGHG:LOW);
+#endif
+		}
+	}
+	else if(waitForBackground){
+		waitForBackground-=dt;
+		if(waitForBackground<=0){
+			background.setLearningTime(10000);
+			background.setLearningRate(0.0001);
+#ifdef CRANIO_RPI
+			digitalWrite(LED1,LOW);
+#endif
+			waitForBackground=0;
+		}
+		else{
+#ifdef CRANIO_RPI
+			digitalWrite(LED1,(((int)waitForBackground*2)%2)?HIGHG:LOW);
+#endif
+		}
 	}
 }
 
