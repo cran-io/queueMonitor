@@ -20,11 +20,10 @@
 #define CAMERA_HEIGHT 360
 #define CAMERA_FPS 30
 
-#define PROCESSING_SCALE 0.5
-#define PROCESSING_WIDTH (PROCESSING_SCALE*CAMERA_WIDTH)
-#define PROCESSING_HEIGHT (PROCESSING_SCALE*CAMERA_HEIGHT)
+#define PROCESSING_WIDTH 320
+#define PROCESSING_HEIGHT 180
 
-#define DRAW_SCALE 1.0
+#define DRAW_SCALE 0.5
 
 typedef struct Area{
 	vector<ofPoint> vertex;
@@ -72,7 +71,8 @@ class testApp : public ofBaseApp{
     int 				threshold;
 
 	ofxCv::RunningBackground	background;
-	ofxCvColorImage				frame;
+	ofxCvColorImage				cameraFrame;
+	ofxCvColorImage				processingFrame;
 	ofxCvGrayscaleImage			thresholded;
 	ofxCvColorImage				mask;
 	ofImage imgThresholded;
