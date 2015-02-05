@@ -13,6 +13,8 @@
 #define LED0 7
 #define LED1 27
 
+#define REPORT_TIMEOUT 2.0
+
 bool persistenceCalculation(bool condition,int& last, int threshold){
 	if(condition){
 		if(last<threshold){
@@ -55,6 +57,8 @@ void testApp::setup(){
 	}
 	video.setup(omxCameraSettings);
 
+	video.setWhiteBalance(OMX_WhiteBalControlFluorescent);
+
 	if(wiringPiSetup() == -1){
         cout<<"Error on wiringPi setup"<<endl;
     }
@@ -82,8 +86,8 @@ void testApp::setup(){
     
 	threshold = 35;
     
-	waitForCamera=4.0; //seconds
-	waitForBackground=2.0; //seconds
+	waitForCamera=6.0; //seconds
+	waitForBackground=5.0; //seconds
 
 	background.setLearningTime(10000);
 	background.setLearningRate(0.0001);
@@ -130,9 +134,10 @@ void testApp::setup(){
 	queueFull=false;
     
 	ofEnableAlphaBlending();
-    ofSetVerticalSync(true);
+    	ofSetVerticalSync(true);
 	ofSetFrameRate(30);
-
+	
+	reportTimeout=REPORT_TIMEOUT;
 	time=ofGetElapsedTimef();
 }
 
@@ -151,8 +156,13 @@ void testApp::update(){
 	}
 
 	if(video.isFrameNew()){
-		cameraFrame.setFromPixels(video.getPixels(),video.getWidth(),video.getHeight());
-		processingFrame.scaleIntoMe(cameraFrame);
+		if(CAMERA_WIDTH!=PROCESSING_WIDTH || CAMERA_HEIGHT!=PROCESSING_HEIGHT){
+			cameraFrame.setFromPixels(video.getPixels(),video.getWidth(),video.getHeight());
+			processingFrame.scaleIntoMe(cameraFrame);
+		}
+		else{
+			processingFrame.setFromPixels(video.getPixels(),video.getWidth(),video.getHeight());
+		}
 		background.update(ofxCv::toCv(processingFrame), ofxCv::toCv(thresholded));
 		
 		thresholded.erode(5);
@@ -227,6 +237,7 @@ void testApp::update(){
 	if(waitForCamera){
 		waitForCamera-=dt;
 		if(waitForCamera<=0){
+			background.reset();
 			background.setLearningTime(200);
 			background.setLearningRate(0.05);
 #ifdef CRANIO_RPI
@@ -236,13 +247,15 @@ void testApp::update(){
 		}
 		else{
 #ifdef CRANIO_RPI
-			digitalWrite(LED0,(((int)waitForCamera)%2)?HIGHG:LOW);
+			digitalWrite(LED0,(((int)waitForCamera)%2)?HIGH:LOW);
 #endif
 		}
 	}
 	else if(waitForBackground){
 		waitForBackground-=dt;
 		if(waitForBackground<=0){
+			blobsTracker.reset();
+
 			background.setLearningTime(10000);
 			background.setLearningRate(0.0001);
 #ifdef CRANIO_RPI
@@ -252,8 +265,16 @@ void testApp::update(){
 		}
 		else{
 #ifdef CRANIO_RPI
-			digitalWrite(LED1,(((int)waitForBackground*2)%2)?HIGHG:LOW);
+			digitalWrite(LED1,(((int)(waitForBackground*3.0f))%2)?HIGH:LOW);
 #endif
+		}
+	}
+
+	if(reportTimeout){
+		reportTimeout-=dt;
+		if(reportTimeout<=0){
+			cout<<ofGetTimestampString()<<" - "<<ofToString(ofGetFrameRate(),2)<<" FPS - "<<blobsTracker.count<<" PEOPLE."<<endl;
+			reportTimeout=REPORT_TIMEOUT;
 		}
 	}
 }

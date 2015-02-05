@@ -16,14 +16,14 @@
 
 #define CRANIO_LIVE
 
-#define CAMERA_WIDTH 640
-#define CAMERA_HEIGHT 360
+#define DRAW_SCALE 1.0
+
 #define CAMERA_FPS 30
+#define CAMERA_WIDTH 320
+#define CAMERA_HEIGHT 240
 
 #define PROCESSING_WIDTH 320
-#define PROCESSING_HEIGHT 180
-
-#define DRAW_SCALE 0.5
+#define PROCESSING_HEIGHT 240
 
 typedef struct Area{
 	vector<ofPoint> vertex;
@@ -107,4 +107,6 @@ class testApp : public ofBaseApp{
 
 	float waitForCamera;
 	float waitForBackground;
+
+	float reportTimeout;
 };

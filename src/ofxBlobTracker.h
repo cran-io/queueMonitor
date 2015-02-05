@@ -81,7 +81,13 @@ public:
 	int count;
 	// the final resulting blobs
 	vector<ofxBlob> blobs;
-	// main update function
+	// reset function
+	void reset(){
+		blobs.clear();
+		count=0;
+		id=0;
+	}
+	//main update function
 	void update(vector<ofxCvBlob>& _newBlobs){
 		float t = ofGetElapsedTimef();
 		float dt = t - time;
