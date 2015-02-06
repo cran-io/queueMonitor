@@ -14,7 +14,7 @@
 #define LED0 7
 #define LED1 27
 
-#define REPORT_TIMEOUT 2.0
+#define REPORT_TIMEOUT 5.0
 
 bool persistenceCalculation(bool condition,int& last, int threshold){
 	if(condition){
@@ -49,14 +49,12 @@ void testApp::setup(){
 #ifdef CRANIO_LIVE
 #ifdef CRANIO_RPI
 	OMXCameraSettings omxCameraSettings;
-    omxCameraSettings.width = CAMERA_WIDTH;
+    	omxCameraSettings.width = CAMERA_WIDTH;
 	omxCameraSettings.height = CAMERA_HEIGHT;
 	omxCameraSettings.framerate = CAMERA_FPS;
 	omxCameraSettings.isUsingTexture = true;
-	    
-	if (doPixels){
-		omxCameraSettings.enablePixels = true;
-	}
+	omxCameraSettings.enablePixels = true;
+	
 	video.setup(omxCameraSettings);
 
 	video.setExposureMode(OMX_ExposureControlAuto);
@@ -230,11 +228,6 @@ void testApp::update(){
 		}
 
 		queueFull=(queueCounter>QUEUE_THRESHOLD);
-
-#ifdef CRANIO_RPI
-		digitalWrite(LED0,queueFull?HIGH:LOW);
-		digitalWrite(LED1,queueFull?HIGH:LOW);
-#endif
 	}
 
 	if(waitForCamera){
@@ -247,7 +240,7 @@ void testApp::update(){
 			//Fix camera settings for backgound subtraction
 			video.setSharpness(video.getSharpness());
 			video.setContrast(video.getContrast());
-			video.setBrightness(video.getBrigthness());
+			video.setBrightness(video.getBrightness());
 			video.setSaturation(video.getSaturation());
 
 			digitalWrite(LED0,LOW);
@@ -281,9 +274,15 @@ void testApp::update(){
 		}
 		else{
 #ifdef CRANIO_RPI
-			digitalWrite(LED1,(((int)(waitForBackground*3.0f))%2)?HIGH:LOW);
+			digitalWrite(LED1,(((int)(waitForBackground*4.0f))%2)?HIGH:LOW);
 #endif
 		}
+	}
+	else{
+#ifdef CRANIO_RPI
+		digitalWrite(LED0,((int)(time/4.0f)%4)?LOW:HIGH);
+		digitalWrite(LED1,queueFull?HIGH:LOW);
+#endif
 	}
 
 	if(reportTimeout){
