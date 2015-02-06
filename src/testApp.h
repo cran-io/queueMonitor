@@ -76,8 +76,7 @@ class testApp : public ofBaseApp{
 	ofxCvColorImage				cameraFrame;
 	ofxCvColorImage				processingFrame;
 	ofxCvGrayscaleImage			thresholded;
-	ofxCvColorImage				mask;
-	ofImage imgThresholded;
+	//ofxCvColorImage				mask;
 	ofImage imgBackground;
 
 	Area preLimit;

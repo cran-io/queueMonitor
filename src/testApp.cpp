@@ -1,6 +1,7 @@
 #include "testApp.h"
 
-#define PERSISTENCE_THRESHOLD 30
+#define APP_FPS 5
+#define PERSISTENCE_THRESHOLD 10
 
 #define CASE1_POSTLIMIT_DENSITY_THRESHOLD 0.1
 #define CASE1_PRELIMIT_DENSITY_THRESHOLD 0.4
@@ -8,7 +9,7 @@
 #define CASE2_POSTLIMIT_DENSITY_THRESHOLD 0.2
 #define CASE2_PRELIMIT_DENSITY_THRESHOLD 0.2
 
-#define QUEUE_THRESHOLD 50
+#define QUEUE_THRESHOLD 25
 
 #define LED0 7
 #define LED1 27
@@ -57,7 +58,8 @@ void testApp::setup(){
 	}
 	video.setup(omxCameraSettings);
 
-	video.setWhiteBalance(OMX_WhiteBalControlFluorescent);
+	video.setExposureMode(OMX_ExposureControlAuto);
+	video.setWhiteBalance(OMX_WhiteBalControlAuto);
 
 	if(wiringPiSetup() == -1){
         cout<<"Error on wiringPi setup"<<endl;
@@ -84,19 +86,19 @@ void testApp::setup(){
     video.play();
 #endif
     
-	threshold = 35;
+	threshold = 15;
     
-	waitForCamera=6.0; //seconds
+	waitForCamera=10.0; //seconds
 	waitForBackground=5.0; //seconds
 
-	background.setLearningTime(10000);
+	background.setLearningTime(100);
 	background.setLearningRate(0.0001);
 	background.setThresholdValue(threshold);
 	
 	cameraFrame.allocate(CAMERA_WIDTH,CAMERA_HEIGHT);
 	processingFrame.allocate(PROCESSING_WIDTH,PROCESSING_HEIGHT);
 	thresholded.allocate(PROCESSING_WIDTH,PROCESSING_HEIGHT);
-	mask.allocate(PROCESSING_WIDTH,PROCESSING_HEIGHT);
+	//mask.allocate(PROCESSING_WIDTH,PROCESSING_HEIGHT);
 
 	imgBackground.allocate(PROCESSING_WIDTH,PROCESSING_HEIGHT,OF_IMAGE_COLOR);
 
@@ -134,8 +136,8 @@ void testApp::setup(){
 	queueFull=false;
     
 	ofEnableAlphaBlending();
-    	ofSetVerticalSync(true);
-	ofSetFrameRate(30);
+    ofSetVerticalSync(true);
+	ofSetFrameRate(APP_FPS);
 	
 	reportTimeout=REPORT_TIMEOUT;
 	time=ofGetElapsedTimef();
@@ -169,10 +171,8 @@ void testApp::update(){
 		thresholded.dilate(10);
 		thresholded.blur(21);
 
-		mask=thresholded;
-		processingFrame&=mask;
-		
-		imgThresholded.setFromPixels(thresholded.getPixelsRef());
+		//mask=thresholded;
+		//processingFrame&=mask;
 
 		if(doDebug){
 			processingFrame.updateTexture();
@@ -238,11 +238,18 @@ void testApp::update(){
 		waitForCamera-=dt;
 		if(waitForCamera<=0){
 			background.reset();
-			background.setLearningTime(200);
+			background.setLearningTime(50);
 			background.setLearningRate(0.05);
 #ifdef CRANIO_RPI
+			//Fix camera settings for backgound subtraction
+			video.setSharpness(video.getSharpness());
+			video.setContrast(video.getContrast());
+			video.setBrightness(video.getBrigthness());
+			video.setSaturation(video.getSaturation());
+
 			digitalWrite(LED0,LOW);
 #endif
+			cout<<"Finished waiting for camera."<<endl;
 			waitForCamera=0;
 		}
 		else{
@@ -256,11 +263,15 @@ void testApp::update(){
 		if(waitForBackground<=0){
 			blobsTracker.reset();
 
-			background.setLearningTime(10000);
+			background.setLearningTime(100);
 			background.setLearningRate(0.0001);
 #ifdef CRANIO_RPI
 			digitalWrite(LED1,LOW);
 #endif
+			cout<<"Finished capturing background."<<endl;
+			string filenameTime = ofGetTimestampString();
+			ofSaveScreen("screens/"+filenameTime +".png");
+			ofSaveImage(imgBackground.getPixelsRef(),"screens/"+filenameTime+"_background.png");
 			waitForBackground=0;
 		}
 		else{
@@ -284,7 +295,7 @@ void testApp::draw(){
 	if(queueFull)
 		ofBackground(255,0,0);
 	else
-		ofBackground(125);
+		ofBackground(255);
 	ofPushMatrix();
 	ofScale(DRAW_SCALE,DRAW_SCALE);
 	ofSetColor(255);
@@ -299,10 +310,10 @@ void testApp::draw(){
 		imgBackground.draw(PROCESSING_WIDTH,0);
 		
 		//thresholded.draw(670,10,320,240);
-		imgThresholded.draw(0,PROCESSING_HEIGHT);
+		thresholded.draw(0,PROCESSING_HEIGHT);
 		contourFinder.draw(0,PROCESSING_HEIGHT);
 		blobsTracker.draw(0,PROCESSING_HEIGHT);
-		processingFrame.draw(PROCESSING_WIDTH,PROCESSING_HEIGHT);
+		//processingFrame.draw(PROCESSING_WIDTH,PROCESSING_HEIGHT);
 	}
 
 	drawAllZones();
@@ -310,11 +321,11 @@ void testApp::draw(){
     ofPopMatrix();
 
 	stringstream info;
-	info << "APP FPS: " << ofGetFrameRate() << "\n";
+	info << "APP FPS: " << ofToString(ofGetFrameRate(),2) << "\n";
 	info << "Camera Resolution: " << video.getWidth() << "x" << video.getHeight()	<< " @ "<< CAMERA_FPS <<"FPS"<< "\n";
     info << "BLOBS: " << contourFinder.nBlobs << "\n";
 	info << "PEOPLE COUNT: " << blobsTracker.count << "\n";
-	info << "DENSITY: Post: " << postLimitDensity << ", Pre: " << preLimitDensity << "\n";
+	info << "DENSITY: Post: " << ofToString(postLimitDensity,2) << ", Pre: " << ofToString(preLimitDensity,2) << "\n";
 	info << "QUEUE COUNTER: " << queueCounter << "\n";
 	info << "\n";
     info << "Press space to capture background" << "\n";
@@ -323,7 +334,7 @@ void testApp::draw(){
 	info << "Press r to Toggle pixel reloading" << "\n";
 	info << "Press g to Toggle info" << "\n";
 	if (doDrawInfo){
-		ofDrawBitmapStringHighlight(info.str(), 0, 2*CAMERA_HEIGHT*DRAW_SCALE+20, ofColor::black, ofColor::yellow);
+		ofDrawBitmapStringHighlight(info.str(), CAMERA_WIDTH*DRAW_SCALE+10, CAMERA_HEIGHT*DRAW_SCALE+20, ofColor::black, ofColor::yellow);
 	}
 }
 //--------------------------------------------------------------
@@ -346,13 +357,6 @@ void testApp::drawAllZones(){
 	ofNoFill();
 	drawZones();
 	ofPopMatrix();
-
-	ofPushMatrix();
-	ofTranslate(PROCESSING_WIDTH,PROCESSING_HEIGHT);
-	ofNoFill();
-	drawZones();
-	ofPopMatrix();
-	ofPopStyle();
 }
 
 //--------------------------------------------------------------
