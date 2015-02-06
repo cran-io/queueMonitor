@@ -57,5 +57,8 @@ ipch/
 *.mov
 *.DS_Store
 
+#Project specific
+bin/data/DEBUG*
+
 # don't ignore the .gitignore file
 !.gitignore

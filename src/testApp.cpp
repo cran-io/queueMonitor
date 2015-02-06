@@ -40,11 +40,12 @@ ofPoint deletionZoneP1,deletionZoneP2;
 //--------------------------------------------------------------
 void testApp::setup(){
     
-    ofSetLogLevel(OF_LOG_VERBOSE);
-	ofSetLogLevel("ofThread", OF_LOG_ERROR);
-    doDrawInfo	= true;
-	doPixels = true;
-	doDebug = true;
+	doDebug = ofFile::doesFileExist("DEBUG");
+
+    if(doDebug){
+		ofSetLogLevel(OF_LOG_VERBOSE);
+		ofSetLogLevel("ofThread", OF_LOG_ERROR);
+	}
 #ifdef CRANIO_LIVE
 #ifdef CRANIO_RPI
 	OMXCameraSettings omxCameraSettings;
@@ -134,6 +135,10 @@ void testApp::setup(){
 
 	queueCounter=0;
 	queueFull=false;
+
+#ifndef CRANIO_RPI
+	calibrationMode=false;
+#endif
     
 	ofEnableAlphaBlending();
     ofSetVerticalSync(true);
@@ -150,13 +155,11 @@ void testApp::update(){
 	time = t;
 
 #ifndef CRANIO_RPI
-    video.update();
-#endif
-
-	if(!doPixels){
+	if(calibrationMode)
 		return;
-	}
 
+	video.update();
+#endif
 	if(video.isFrameNew()){
 		if(CAMERA_WIDTH!=PROCESSING_WIDTH || CAMERA_HEIGHT!=PROCESSING_HEIGHT){
 			cameraFrame.setFromPixels(video.getPixels(),video.getWidth(),video.getHeight());
@@ -269,9 +272,11 @@ void testApp::update(){
 			digitalWrite(LED1,LOW);
 #endif
 			cout<<"Finished capturing background."<<endl;
-			string filenameTime = ofGetTimestampString();
-			ofSaveScreen("screens/"+filenameTime +".png");
-			ofSaveImage(imgBackground.getPixelsRef(),"screens/"+filenameTime+"_background.png");
+			if(doDebug){
+				string filenameTime = ofGetTimestampString();
+				ofSaveScreen("screens/"+filenameTime +".png");
+				ofSaveImage(imgBackground.getPixelsRef(),"screens/"+filenameTime+"_background.png");
+			}
 			waitForBackground=0;
 		}
 		else{
@@ -296,16 +301,17 @@ void testApp::draw(){
 		ofBackground(255,0,0);
 	else
 		ofBackground(255);
-	ofPushMatrix();
-	ofScale(DRAW_SCALE,DRAW_SCALE);
-	ofSetColor(255);
+	if(doDebug){
+		ofPushMatrix();
+		ofScale(DRAW_SCALE,DRAW_SCALE);
+		ofSetColor(255);
 #ifdef CRANIO_RPI
-    video.draw();
+		video.draw();
 #else
-    video.draw(0,0);
+		if(!calibrationMode)
+			video.draw(0,0);
 #endif
-	ofScale(CAMERA_WIDTH/PROCESSING_WIDTH,CAMERA_HEIGHT/PROCESSING_HEIGHT);
-	if(doPixels && doDebug){
+		ofScale(CAMERA_WIDTH/PROCESSING_WIDTH,CAMERA_HEIGHT/PROCESSING_HEIGHT);
 		// draw the incoming, the grayscale, the bg and the thresholded difference
 		imgBackground.draw(PROCESSING_WIDTH,0);
 		
@@ -314,26 +320,24 @@ void testApp::draw(){
 		contourFinder.draw(0,PROCESSING_HEIGHT);
 		blobsTracker.draw(0,PROCESSING_HEIGHT);
 		//processingFrame.draw(PROCESSING_WIDTH,PROCESSING_HEIGHT);
-	}
 
-	drawAllZones();
+		drawAllZones();
 
-    ofPopMatrix();
+		ofPopMatrix();
 
-	stringstream info;
-	info << "APP FPS: " << ofToString(ofGetFrameRate(),2) << "\n";
-	info << "Camera Resolution: " << video.getWidth() << "x" << video.getHeight()	<< " @ "<< CAMERA_FPS <<"FPS"<< "\n";
-    info << "BLOBS: " << contourFinder.nBlobs << "\n";
-	info << "PEOPLE COUNT: " << blobsTracker.count << "\n";
-	info << "DENSITY: Post: " << ofToString(postLimitDensity,2) << ", Pre: " << ofToString(preLimitDensity,2) << "\n";
-	info << "QUEUE COUNTER: " << queueCounter << "\n";
-	info << "\n";
-    info << "Press space to capture background" << "\n";
-    info << "Threshold " << threshold << " (press: UP/DOWN)" << "\n";
-	info << "Press p to Toggle pixel processing" << "\n";
-	info << "Press r to Toggle pixel reloading" << "\n";
-	info << "Press g to Toggle info" << "\n";
-	if (doDrawInfo){
+		stringstream info;
+		info << "APP FPS: " << ofToString(ofGetFrameRate(),2) << "\n";
+		info << "Camera Resolution: " << video.getWidth() << "x" << video.getHeight()	<< " @ "<< CAMERA_FPS <<"FPS"<< "\n";
+		info << "BLOBS: " << contourFinder.nBlobs << "\n";
+		info << "PEOPLE COUNT: " << blobsTracker.count << "\n";
+		info << "DENSITY: Post: " << ofToString(postLimitDensity,2) << ", Pre: " << ofToString(preLimitDensity,2) << "\n";
+		info << "QUEUE COUNTER: " << queueCounter << "\n";
+		info << "\n";
+		info << "Press space to capture background" << "\n";
+		info << "Threshold " << threshold << " (press: UP/DOWN)" << "\n";
+		info << "Press p to Toggle pixel processing" << "\n";
+		info << "Press r to Toggle pixel reloading" << "\n";
+		info << "Press g to Toggle info" << "\n";
 		ofDrawBitmapStringHighlight(info.str(), CAMERA_WIDTH*DRAW_SCALE+10, CAMERA_HEIGHT*DRAW_SCALE+20, ofColor::black, ofColor::yellow);
 	}
 }
@@ -457,27 +461,9 @@ void testApp::makeLimitMask(){
 
 //--------------------------------------------------------------
 void testApp::keyPressed(int key){
-    
-    if (key == 'g'){
-		doDrawInfo = !doDrawInfo;
-	}
 	if (key == 'd'){
 		doDebug = !doDebug;
-	}	
-	if (key == 'p')
-	{
-		doPixels = !doPixels;
-#ifdef CRANIO_RPI
-		if (!doPixels)
-		{
-			video.disablePixels();
-		}else
-		{
-			video.enablePixels();
-		}
-#endif
-	}
-    
+	}	    
     if (key == ' ') {
         background.reset();
 	}
@@ -493,7 +479,6 @@ void testApp::keyPressed(int key){
             threshold = 0;
 		background.setThresholdValue(threshold);
 	}
-
 }
 
 //--------------------------------------------------------------
@@ -563,7 +548,12 @@ void testApp::gotMessage(ofMessage msg){
 
 //--------------------------------------------------------------
 void testApp::dragEvent(ofDragInfo dragInfo){ 
-
+#ifndef CRANIO_RPI
+	if( dragInfo.files.size() > 0 ){
+		calibrationMode=true;
+		imgBackground.loadImage(dragInfo.files[0]);
+	}
+#endif
 }
 
 //--------------------------------------------------------------

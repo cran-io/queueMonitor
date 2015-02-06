@@ -62,9 +62,7 @@ class testApp : public ofBaseApp{
 #endif
 
 	float time;
-    
-    bool doDrawInfo;
-    bool doPixels;
+
 	bool doDebug;
     
     ofxBlobTracker		blobsTracker;
@@ -108,4 +106,8 @@ class testApp : public ofBaseApp{
 	float waitForBackground;
 
 	float reportTimeout;
+
+#ifndef CRANIO_RPI
+	bool calibrationMode;
+#endif
 };
