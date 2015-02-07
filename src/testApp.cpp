@@ -11,8 +11,8 @@
 
 #define QUEUE_THRESHOLD 25
 
-#define LED0 7
-#define LED1 27
+#define LED0 27
+#define LED1 7
 
 #define REPORT_TIMEOUT 5.0
 
@@ -409,7 +409,7 @@ void testApp::makeLimitMask(){
 	postLimit.maxY=max(limitBottom.y,postLimit.vertex[1].y);
 
 	ofFbo tempFbo;
-	tempFbo.allocate(CAMERA_WIDTH,CAMERA_HEIGHT);
+	tempFbo.allocate(PROCESSING_WIDTH,PROCESSING_HEIGHT);
 
 	tempFbo.begin();
 	ofClear(0);
@@ -465,6 +465,9 @@ void testApp::keyPressed(int key){
 	}	    
     if (key == ' ') {
         background.reset();
+	}
+	if(key == 'r'){
+		blobsTracker.reset();
 	}
 	if (key == OF_KEY_UP) {
         threshold ++;
