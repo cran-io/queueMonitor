@@ -55,10 +55,12 @@ ipch/
 *.jpg
 *.jpeg
 *.mov
+*.mp4
 *.DS_Store
 
 #Project specific
 bin/data/DEBUG*
+*.h264
 
 # don't ignore the .gitignore file
 !.gitignore
