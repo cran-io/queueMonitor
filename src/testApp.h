@@ -104,6 +104,9 @@ class testApp : public ofBaseApp{
 
 	float reportTimeout;
 
+	ofSoundPlayer alarm;
+	float alarmTimeout;
+
 #ifndef CRANIO_RPI
 	bool calibrationMode;
 #endif

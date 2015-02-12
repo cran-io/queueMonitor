@@ -15,6 +15,7 @@
 #define LED1 7
 
 #define REPORT_TIMEOUT 5.0
+#define ALARM_TIMEOUT 120.0
 
 bool persistenceCalculation(bool condition,int& last, int threshold){
 	if(condition){
@@ -145,12 +146,15 @@ void testApp::setup(){
 #ifndef CRANIO_RPI
 	calibrationMode=false;
 #endif
+
+	alarm.loadSound("alarm.wav");
     
 	ofEnableAlphaBlending();
     ofSetVerticalSync(true);
 	ofSetFrameRate(APP_FPS);
 	
 	reportTimeout=REPORT_TIMEOUT;
+	alarmTimeout=0;
 	time=ofGetElapsedTimef();
 }
 
@@ -302,6 +306,19 @@ void testApp::update(){
 				reportTimeout=REPORT_TIMEOUT;
 			}
 		}
+	}
+
+	if(queueFull){
+		if(alarmTimeout<=0){
+			alarm.play();
+			alarmTimeout=ALARM_TIMEOUT;
+		}
+		else{
+			alarmTimeout-=dt;
+		}
+	}
+	else{
+		alarmTimeout=0;
 	}
 }
 
