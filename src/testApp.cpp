@@ -15,7 +15,7 @@
 #define LED1 7
 
 #define REPORT_TIMEOUT 5.0
-#define ALARM_TIMEOUT 120.0
+#define ALARM_TIMEOUT 240.0
 
 bool persistenceCalculation(bool condition,int& last, int threshold){
 	if(condition){
@@ -302,7 +302,7 @@ void testApp::update(){
 		if(reportTimeout){
 			reportTimeout-=dt;
 			if(reportTimeout<=0){
-				cout<<ofGetTimestampString()<<" - "<<ofToString(ofGetFrameRate(),2)<<" FPS - "<<blobsTracker.count<<" PEOPLE."<<endl;
+				cout<<ofGetTimestampString()<<" - "<<ofToString(ofGetFrameRate(),2)<<" FPS - "<<peopleCount<<" PEOPLE - " << peopleCountEntering << " ENT - " << peopleCountLeaving << " LEA."<<endl;
 				reportTimeout=REPORT_TIMEOUT;
 			}
 		}
