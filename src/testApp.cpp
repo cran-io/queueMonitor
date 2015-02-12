@@ -101,24 +101,32 @@ void testApp::setup(){
 
 	imgBackground.allocate(PROCESSING_WIDTH,PROCESSING_HEIGHT,OF_IMAGE_COLOR);
 
+	ofAddListener(blobsTracker.blobAdded, this, &testApp::blobAdded);
+    ofAddListener(blobsTracker.blobUpdated, this, &testApp::blobUpdated);
+    ofAddListener(blobsTracker.blobDeleted, this, &testApp::blobDeleted);
+
 	blobsTracker.normalizePercentage = 0.5;
 	blobsTracker.clearDeletionZones();
 	deletionZoneP1.set(PROCESSING_WIDTH-PROCESSING_WIDTH*0.15,0);
 	deletionZoneP2.set(PROCESSING_WIDTH,PROCESSING_HEIGHT);
 	blobsTracker.addDeletionZone(ofRectangle(deletionZoneP1,deletionZoneP2));
 
-	limitTop.set(PROCESSING_WIDTH/2,0);
-	limitBottom.set(PROCESSING_WIDTH/2,PROCESSING_HEIGHT);
+	preLimit.vertex[0].set(0.5,1.0);
+	preLimit.vertex[1].set(0.5,0.0);
+	preLimit.vertex[2].set(1.0,0.0);
+	preLimit.vertex[3].set(1.0,1.0);
 
-	preLimit.vertex.push_back(ofPoint(PROCESSING_WIDTH,0));
-	preLimit.vertex.push_back(ofPoint(PROCESSING_WIDTH,PROCESSING_HEIGHT));
+	postLimit.vertex[0].set(preLimit.vertex[0]);
+	postLimit.vertex[1].set(preLimit.vertex[1]);
+	postLimit.vertex[2].set(0.0,0.0);
+	postLimit.vertex[3].set(0.0,1.0);
 
-	postLimit.vertex.push_back(ofPoint(0,0));
-	postLimit.vertex.push_back(ofPoint(0,PROCESSING_HEIGHT));
+	loadLimits();
 
-	preLimitMask.allocate(PROCESSING_WIDTH,PROCESSING_HEIGHT,OF_IMAGE_GRAYSCALE);
+	preLimit.updateMask(PROCESSING_WIDTH,PROCESSING_HEIGHT);
+	postLimit.updateMask(PROCESSING_WIDTH,PROCESSING_HEIGHT);
+
 	preLimitDensity=0;
-	postLimitMask.allocate(PROCESSING_WIDTH,PROCESSING_HEIGHT,OF_IMAGE_GRAYSCALE);
 	postLimitDensity=0;
 
 	case1PreLimitOccupation=0;
@@ -126,10 +134,6 @@ void testApp::setup(){
 
 	case2PreLimitOccupation=0;
 	case2PostLimitOccupation=0;
-
-	loadLimits();
-
-	makeLimitMask();
 
 	queueCounter=0;
 	queueFull=false;
@@ -190,10 +194,10 @@ void testApp::update(){
 		int width=thresholded.getWidth();
 		int height=thresholded.getHeight();
 		unsigned char * framePixels = thresholded.getPixels();
-		unsigned char * preLimitMaskPixels = preLimitMask.getPixels();
+		unsigned char * preLimitMaskPixels = preLimit.mask.getPixels();
 		long preLimitOccupation=0;
-		for(int y=preLimit.minY;y<preLimit.maxY;y++){
-			for(int x=preLimit.minX;x<preLimit.maxX;x++){
+		for(int y=preLimit.minY*height;y<(preLimit.maxY*height);y++){
+			for(int x=preLimit.minX*width;x<(preLimit.maxX*width);x++){
 				if(preLimitMaskPixels[x+y*width])
 					preLimitOccupation+=framePixels[x+y*width];
 			}
@@ -201,10 +205,10 @@ void testApp::update(){
 		preLimitOccupation/=255;
 		preLimitDensity=preLimitOccupation/(float)preLimit.pixelCount;
 
-		unsigned char * postLimitMaskPixels = postLimitMask.getPixels();
+		unsigned char * postLimitMaskPixels = postLimit.mask.getPixels();
 		long postLimitOccupation=0;
-		for(int y=postLimit.minY;y<postLimit.maxY;y++){
-			for(int x=postLimit.minX;x<postLimit.maxX;x++){
+		for(int y=postLimit.minY*height;y<postLimit.maxY*height;y++){
+			for(int x=postLimit.minX*width;x<postLimit.maxX*width;x++){
 				if(postLimitMaskPixels[x+y*width])
 					postLimitOccupation+=framePixels[x+y*width];
 			}
@@ -295,6 +299,21 @@ void testApp::update(){
 }
 
 //--------------------------------------------------------------
+void testApp::blobAdded(ofxBlob &_blob){
+    ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " added" );
+}
+
+//--------------------------------------------------------------
+void testApp::blobUpdated(ofxBlob &_blob){
+    //ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " updated" );
+}
+
+//--------------------------------------------------------------
+void testApp::blobDeleted(ofxBlob &_blob){
+    ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " deleted" );
+}
+
+//--------------------------------------------------------------
 void testApp::draw(){
 	if(queueFull)
 		ofBackground(255,0,0);
@@ -310,18 +329,14 @@ void testApp::draw(){
 		if(!calibrationMode)
 			video.draw(0,0);
 #endif
-		ofScale(CAMERA_WIDTH/PROCESSING_WIDTH,CAMERA_HEIGHT/PROCESSING_HEIGHT);
-		// draw the incoming, the grayscale, the bg and the thresholded difference
+		ofPushMatrix();
+		ofScale((float)CAMERA_WIDTH/PROCESSING_WIDTH,(float)CAMERA_HEIGHT/PROCESSING_HEIGHT);
 		imgBackground.draw(PROCESSING_WIDTH,0);
-		
-		//thresholded.draw(670,10,320,240);
 		thresholded.draw(0,PROCESSING_HEIGHT);
 		contourFinder.draw(0,PROCESSING_HEIGHT);
 		blobsTracker.draw(0,PROCESSING_HEIGHT);
-		//processingFrame.draw(PROCESSING_WIDTH,PROCESSING_HEIGHT);
-
 		drawAllZones();
-
+		ofPopMatrix();
 		ofPopMatrix();
 
 		stringstream info;
@@ -343,6 +358,7 @@ void testApp::draw(){
 //--------------------------------------------------------------
 void testApp::drawAllZones(){
 	ofPushStyle();
+	
 	ofPushMatrix();
 	ofTranslate(0,0);
 	ofNoFill();
@@ -360,102 +376,26 @@ void testApp::drawAllZones(){
 	ofNoFill();
 	drawZones();
 	ofPopMatrix();
-}
-
-//--------------------------------------------------------------
-void testApp::drawZones(){
-	ofPushStyle();
-	ofSetColor(200,200,200,100);
-	ofSetPolyMode(OF_POLY_WINDING_ODD);	// this is the normal mode
-	ofBeginShape();
-		ofVertex(limitBottom);
-		ofVertex(limitTop);
-		ofVertex(preLimit.vertex[0]);
-		ofVertex(preLimit.vertex[1]);
-	ofEndShape(true);
-	ofSetColor(0,200,200,100);
-	ofSetPolyMode(OF_POLY_WINDING_ODD);	// this is the normal mode
-	ofBeginShape();
-		ofVertex(limitBottom);
-		ofVertex(limitTop);
-		ofVertex(postLimit.vertex[0]);
-		ofVertex(postLimit.vertex[1]);
-	ofEndShape(true);
-	ofSetColor(0,255,0,100);
-	ofCircle(limitTop,10);
-	ofCircle(limitBottom,10);
-	ofCircle(preLimit.vertex[0],10);
-	ofCircle(preLimit.vertex[1],10);
-	ofCircle(postLimit.vertex[0],10);
-	ofCircle(postLimit.vertex[1],10);
-	ofCircle(limitMidpoint,5);
-	ofSetColor(255,0,0,100);
-	ofRect(ofRectangle(deletionZoneP1,deletionZoneP2));
+	
 	ofPopStyle();
 }
 
 //--------------------------------------------------------------
-void testApp::makeLimitMask(){
-	limitMidpoint=limitTop+(limitBottom-limitTop)*0.5;
-
-	preLimit.minX=min(limitTop.x,limitBottom.x);
-	preLimit.maxX=max(preLimit.vertex[0].x,preLimit.vertex[1].x);
-	preLimit.minY=min(limitTop.y,preLimit.vertex[0].y);
-	preLimit.maxY=max(limitBottom.y,preLimit.vertex[1].y);
-
-	postLimit.maxX=max(limitTop.x,limitBottom.x);
-	postLimit.minX=min(postLimit.vertex[0].x,postLimit.vertex[1].x);
-	postLimit.minY=min(limitTop.y,postLimit.vertex[0].y);
-	postLimit.maxY=max(limitBottom.y,postLimit.vertex[1].y);
-
-	ofFbo tempFbo;
-	tempFbo.allocate(PROCESSING_WIDTH,PROCESSING_HEIGHT);
-
-	tempFbo.begin();
-	ofClear(0);
-	ofSetColor(255);
-	ofSetPolyMode(OF_POLY_WINDING_ODD);	// this is the normal mode
-	ofBeginShape();
-		ofVertex(limitBottom);
-		ofVertex(limitTop);
-		ofVertex(preLimit.vertex[0]);
-		ofVertex(preLimit.vertex[1]);
-	ofEndShape(true);
-	tempFbo.end();
-
-	tempFbo.readToPixels(preLimitMask);
-	preLimitMask.setImageType(OF_IMAGE_GRAYSCALE);
-
-	preLimit.pixelCount=0;
-	for(int y=preLimit.minY;y<preLimit.maxY;y++){
-		for(int x=preLimit.minX;x<preLimit.maxX;x++){
-			if(preLimitMask.getPixels()[x+y*preLimitMask.getWidth()])
-				preLimit.pixelCount++;
-		}
-	}
-	
-	tempFbo.begin();
-	ofClear(0);
-	ofSetColor(255);
-	ofSetPolyMode(OF_POLY_WINDING_ODD);	// this is the normal mode
-	ofBeginShape();
-		ofVertex(limitBottom);
-		ofVertex(limitTop);
-		ofVertex(postLimit.vertex[0]);
-		ofVertex(postLimit.vertex[1]);
-	ofEndShape(true);
-	tempFbo.end();
-
-	tempFbo.readToPixels(postLimitMask);
-	postLimitMask.setImageType(OF_IMAGE_GRAYSCALE);
-
-	postLimit.pixelCount=0;
-	for(int y=postLimit.minY;y<postLimit.maxY;y++){
-		for(int x=postLimit.minX;x<postLimit.maxX;x++){
-			if(postLimitMask.getPixels()[x+y*postLimitMask.getWidth()])
-				postLimit.pixelCount++;
-		}
-	}
+void testApp::drawZones(){
+	ofPushMatrix();
+	ofScale(PROCESSING_WIDTH,PROCESSING_HEIGHT);
+	ofPushStyle();
+	ofSetColor(200,200,200,100);
+	preLimit.drawArea();
+	ofSetColor(0,200,200,100);
+	postLimit.drawArea();
+	ofSetColor(0,255,0,100);
+	preLimit.drawCorners();
+	postLimit.drawCorners();
+	ofPopMatrix();
+	ofSetColor(255,0,0,100);
+	ofRect(ofRectangle(deletionZoneP1,deletionZoneP2));
+	ofPopStyle();
 }
 
 //--------------------------------------------------------------
@@ -495,36 +435,39 @@ void testApp::mouseMoved(int x, int y ){
 
 //--------------------------------------------------------------
 void testApp::mouseDragged(int x, int y, int button){
-	ofPoint mouse((x/DRAW_SCALE-CAMERA_WIDTH)/(CAMERA_WIDTH/PROCESSING_WIDTH),(y/DRAW_SCALE)/(CAMERA_WIDTH/PROCESSING_WIDTH));
-	if(dragginPoint==0)
-		limitBottom.set(mouse);
-	else if(dragginPoint==1)
-		limitTop.set(mouse);
-	else if(dragginPoint==2)
+	ofPoint mouse((x/DRAW_SCALE-CAMERA_WIDTH)/((float)CAMERA_WIDTH),(y/DRAW_SCALE)/((float)CAMERA_HEIGHT));
+	if(dragginPoint==0){
 		preLimit.vertex[0].set(mouse);
-	else if(dragginPoint==3)
+		postLimit.vertex[0].set(preLimit.vertex[0]);
+	}
+	else if(dragginPoint==1){
 		preLimit.vertex[1].set(mouse);
+		postLimit.vertex[1].set(preLimit.vertex[1]);
+	}
+	else if(dragginPoint==2)
+		preLimit.vertex[2].set(mouse);
+	else if(dragginPoint==3)
+		preLimit.vertex[3].set(mouse);
 	else if(dragginPoint==4)
-		postLimit.vertex[0].set(mouse);
+		postLimit.vertex[2].set(mouse);
 	else if(dragginPoint==5)
-		postLimit.vertex[1].set(mouse);
+		postLimit.vertex[3].set(mouse);
 }
 
 //--------------------------------------------------------------
 void testApp::mousePressed(int x, int y, int button){
-	ofPoint mouse((x/DRAW_SCALE-CAMERA_WIDTH)/(CAMERA_WIDTH/PROCESSING_WIDTH),(y/DRAW_SCALE)/(CAMERA_WIDTH/PROCESSING_WIDTH));
-	//cout<<limitBottom.distanceSquared(mouse)<<endl;
-	if(limitBottom.distanceSquared(mouse)<100)
+	ofPoint mouse((x/DRAW_SCALE-CAMERA_WIDTH)/((float)CAMERA_WIDTH),(y/DRAW_SCALE)/((float)CAMERA_HEIGHT));
+	if(preLimit.vertex[0].distanceSquared(mouse)<0.01f)
 		dragginPoint=0;
-	else if(limitTop.distanceSquared(mouse)<100)
+	else if(preLimit.vertex[1].distanceSquared(mouse)<0.01f)
 		dragginPoint=1;
-	else if(preLimit.vertex[0].distanceSquared(mouse)<100)
+	else if(preLimit.vertex[2].distanceSquared(mouse)<0.01f)
 		dragginPoint=2;
-	else if(preLimit.vertex[1].distanceSquared(mouse)<100)
+	else if(preLimit.vertex[3].distanceSquared(mouse)<0.01f)
 		dragginPoint=3;
-	else if(postLimit.vertex[0].distanceSquared(mouse)<100)
+	else if(postLimit.vertex[2].distanceSquared(mouse)<0.01f)
 		dragginPoint=4;
-	else if(postLimit.vertex[1].distanceSquared(mouse)<100)
+	else if(postLimit.vertex[3].distanceSquared(mouse)<0.01f)
 		dragginPoint=5;
 	else
 		dragginPoint=-1;
@@ -533,7 +476,8 @@ void testApp::mousePressed(int x, int y, int button){
 //--------------------------------------------------------------
 void testApp::mouseReleased(int x, int y, int button){
 	if(dragginPoint>=0){
-		makeLimitMask();
+		preLimit.updateMask(PROCESSING_WIDTH,PROCESSING_HEIGHT);
+		postLimit.updateMask(PROCESSING_WIDTH,PROCESSING_HEIGHT);
 		dragginPoint=-1;
 	}
 }
@@ -574,39 +518,41 @@ void testApp::loadLimits(){
 		ofBuffer buf = ofBufferFromFile("0.limits");
         string line = buf.getNextLine();
 		vector<string> p = ofSplitString(line, ",");
-        limitTop.set(ofPoint(ofToFloat(p[0])*PROCESSING_WIDTH,ofToFloat(p[1])*PROCESSING_HEIGHT));
+        preLimit.vertex[0].set(ofPoint(ofToFloat(p[0]),ofToFloat(p[1])));
 
 		line = buf.getNextLine();
 		p = ofSplitString(line, ",");
-        limitBottom.set(ofPoint(ofToFloat(p[0])*PROCESSING_WIDTH,ofToFloat(p[1])*PROCESSING_HEIGHT));
+        preLimit.vertex[1].set(ofPoint(ofToFloat(p[0]),ofToFloat(p[1])));
 
 		line = buf.getNextLine();
 		p = ofSplitString(line, ",");
-        preLimit.vertex[0].set(ofPoint(ofToFloat(p[0])*PROCESSING_WIDTH,ofToFloat(p[1])*PROCESSING_HEIGHT));
+        preLimit.vertex[2].set(ofPoint(ofToFloat(p[0]),ofToFloat(p[1])));
 
 		line = buf.getNextLine();
 		p = ofSplitString(line, ",");
-        preLimit.vertex[1].set(ofPoint(ofToFloat(p[0])*PROCESSING_WIDTH,ofToFloat(p[1])*PROCESSING_HEIGHT));
+        preLimit.vertex[3].set(ofPoint(ofToFloat(p[0]),ofToFloat(p[1])));
+
+		postLimit.vertex[0].set(preLimit.vertex[0]);
+		postLimit.vertex[1].set(preLimit.vertex[1]);
 
 		line = buf.getNextLine();
 		p = ofSplitString(line, ",");
-        postLimit.vertex[0].set(ofPoint(ofToFloat(p[0])*PROCESSING_WIDTH,ofToFloat(p[1])*PROCESSING_HEIGHT));
+        postLimit.vertex[2].set(ofPoint(ofToFloat(p[0]),ofToFloat(p[1])));
 
 		line = buf.getNextLine();
 		p = ofSplitString(line, ",");
-        postLimit.vertex[1].set(ofPoint(ofToFloat(p[0])*PROCESSING_WIDTH,ofToFloat(p[1])*PROCESSING_HEIGHT));
+        postLimit.vertex[3].set(ofPoint(ofToFloat(p[0]),ofToFloat(p[1])));
 	}
 }
 
 //--------------------------------------------------------------
 void testApp::saveLimits(){
-	ofVec2f dimensions(PROCESSING_WIDTH,PROCESSING_HEIGHT);
 	ofBuffer buf;
-    buf.append(ofToString(limitTop/=dimensions)+"\n");
-	buf.append(ofToString(limitBottom/=dimensions)+"\n");
-	buf.append(ofToString(preLimit.vertex[0]/=dimensions)+"\n");
-	buf.append(ofToString(preLimit.vertex[1]/=dimensions)+"\n");
-	buf.append(ofToString(postLimit.vertex[0]/=dimensions)+"\n");
-	buf.append(ofToString(postLimit.vertex[1]/=dimensions)+"\n");
+    buf.append(ofToString(preLimit.vertex[0])+"\n");
+	buf.append(ofToString(preLimit.vertex[1])+"\n");
+	buf.append(ofToString(preLimit.vertex[2])+"\n");
+	buf.append(ofToString(preLimit.vertex[3])+"\n");
+	buf.append(ofToString(postLimit.vertex[2])+"\n");
+	buf.append(ofToString(postLimit.vertex[3])+"\n");
     ofBufferToFile("0.limits",buf);
 }

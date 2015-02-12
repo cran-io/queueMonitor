@@ -207,6 +207,7 @@ public:
 		for(int blobIndex=0;blobIndex<blobs.size();blobIndex++){
 			if(!blobs[blobIndex].updated){
 				if(blobs[blobIndex].life<LIFE_THRESHOLD){
+					ofNotifyEvent(blobDeleted, blobs[blobIndex]);
 					blobs[blobIndex].deletion=true;
 				}
 				else if(blobs[blobIndex].active){
@@ -226,10 +227,12 @@ public:
 		}
 
 		for (vector<ofxBlob>::iterator it=blobs.begin(); it!=blobs.end();/*it++*/){
-			if(it->deletion)
+			if(it->deletion){
 				it = blobs.erase(it);
-			else 
+			}
+			else{
 				++it;
+			}
 		}
 	}
 
@@ -244,9 +247,15 @@ public:
 		blob.life+=dt;
 		blob.active=true;
 
-		if(!blob.counted && blob.life>LIFE_THRESHOLD){
-			count++;
-			blob.counted=true;
+		if(blob.counted){
+			ofNotifyEvent(blobUpdated, blob);
+		}
+		else{
+			if(blob.life>LIFE_THRESHOLD){
+				count++;
+				ofNotifyEvent(blobAdded, blob);
+				blob.counted=true;
+			}
 		}
 	}
 
@@ -295,6 +304,10 @@ public:
 		ofPopStyle();
 		ofPopMatrix();
 	}
+
+	ofEvent<ofxBlob>    blobAdded;
+    ofEvent<ofxBlob>    blobUpdated;
+    ofEvent<ofxBlob>    blobDeleted;
 
 private:
 	float time;

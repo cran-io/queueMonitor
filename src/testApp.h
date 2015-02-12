@@ -4,6 +4,7 @@
 #include "ofxOpenCv.h"
 #include "ofxCv.h"
 #include "ofxBlobTracker.h"
+#include "ofxArea.h"
 
 #ifdef TARGET_LINUX
 	#define CRANIO_RPI
@@ -14,22 +15,16 @@
 #include "wiringPi.h"
 #endif
 
-#define CRANIO_LIVE
+//#define CRANIO_LIVE
 
 #define DRAW_SCALE 1.0
 
 #define CAMERA_FPS 30
-#define CAMERA_WIDTH 320
-#define CAMERA_HEIGHT 240
+#define CAMERA_WIDTH 640
+#define CAMERA_HEIGHT 360
 
 #define PROCESSING_WIDTH 320
 #define PROCESSING_HEIGHT 240
-
-typedef struct Area{
-	vector<ofPoint> vertex;
-	int minX,minY,maxX,maxY;
-	long pixelCount;
-};
 
 class testApp : public ofBaseApp{
 
@@ -67,6 +62,10 @@ class testApp : public ofBaseApp{
     
     ofxBlobTracker		blobsTracker;
 	ofxCvContourFinder  contourFinder;
+
+	void blobAdded(ofxBlob &_blob);
+    void blobUpdated(ofxBlob &_blob);
+    void blobDeleted(ofxBlob &_blob);
     
     int 				threshold;
 
@@ -77,16 +76,12 @@ class testApp : public ofBaseApp{
 	//ofxCvColorImage				mask;
 	ofImage imgBackground;
 
-	Area preLimit;
-	Area postLimit;
-	ofPoint limitTop,limitBottom,limitMidpoint;
+	ofxArea preLimit;
+	ofxArea postLimit;
 
-	bool draggin;
 	int dragginPoint;
 
-	ofPixels preLimitMask;
 	float preLimitDensity;
-	ofPixels postLimitMask;
 	float postLimitDensity;
 	
 	int case1PreLimitOccupation;
@@ -97,7 +92,6 @@ class testApp : public ofBaseApp{
 
 	void loadLimits();
 	void saveLimits();
-	void makeLimitMask();
 
 	int queueCounter;
 	bool queueFull;
