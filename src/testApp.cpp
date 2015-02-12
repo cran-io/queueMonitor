@@ -135,6 +135,10 @@ void testApp::setup(){
 	case2PreLimitOccupation=0;
 	case2PostLimitOccupation=0;
 
+	peopleCount=0;
+	peopleCountLeaving=0;
+	peopleCountEntering=0;
+
 	queueCounter=0;
 	queueFull=false;
 
@@ -261,6 +265,10 @@ void testApp::update(){
 	else if(waitForBackground){
 		waitForBackground-=dt;
 		if(waitForBackground<=0){
+			peopleCount=0;
+			peopleCountEntering=0;
+			peopleCountLeaving=0;
+			peopleCurrent.clear();
 			blobsTracker.reset();
 
 			background.setLearningTime(100);
@@ -284,16 +292,15 @@ void testApp::update(){
 	}
 	else{
 #ifdef CRANIO_RPI
-		digitalWrite(LED0,((int)(time/4.0f)%4)?LOW:HIGH);
+		digitalWrite(LED0,((int)(time/3.0f)%2)?LOW:HIGH);
 		digitalWrite(LED1,queueFull?HIGH:LOW);
 #endif
-	}
-
-	if(reportTimeout){
-		reportTimeout-=dt;
-		if(reportTimeout<=0){
-			cout<<ofGetTimestampString()<<" - "<<ofToString(ofGetFrameRate(),2)<<" FPS - "<<blobsTracker.count<<" PEOPLE."<<endl;
-			reportTimeout=REPORT_TIMEOUT;
+		if(reportTimeout){
+			reportTimeout-=dt;
+			if(reportTimeout<=0){
+				cout<<ofGetTimestampString()<<" - "<<ofToString(ofGetFrameRate(),2)<<" FPS - "<<blobsTracker.count<<" PEOPLE."<<endl;
+				reportTimeout=REPORT_TIMEOUT;
+			}
 		}
 	}
 }
@@ -301,6 +308,12 @@ void testApp::update(){
 //--------------------------------------------------------------
 void testApp::blobAdded(ofxBlob &_blob){
     ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " added" );
+	int x=_blob.centroid.x;
+	int y=_blob.centroid.y;
+	if(preLimit.mask.getPixels()[x+y*PROCESSING_WIDTH] || postLimit.mask.getPixels()[x+y*PROCESSING_WIDTH]){
+		peopleCount++;
+		peopleCurrent.push_back(_blob.id);
+	}
 }
 
 //--------------------------------------------------------------
@@ -311,6 +324,19 @@ void testApp::blobUpdated(ofxBlob &_blob){
 //--------------------------------------------------------------
 void testApp::blobDeleted(ofxBlob &_blob){
     ofLog(OF_LOG_NOTICE, "Blob ID " + ofToString(_blob.id) + " deleted" );
+	for(vector<int>::iterator it=peopleCurrent.begin();it!=peopleCurrent.end();it++){
+		if(_blob.id==(*it)){
+			ofPoint centroid=_blob.centroid;
+			ofRectangle preLimitRect(ofPoint(preLimit.minX*PROCESSING_WIDTH,preLimit.minY*PROCESSING_HEIGHT),ofPoint(preLimit.maxX*PROCESSING_WIDTH,preLimit.maxY*PROCESSING_HEIGHT));
+			ofRectangle postLimitRect(ofPoint(postLimit.minX*PROCESSING_WIDTH,postLimit.minY*PROCESSING_HEIGHT),ofPoint(postLimit.maxX*PROCESSING_WIDTH,postLimit.maxY*PROCESSING_HEIGHT));
+			if(centroid.distanceSquared(preLimitRect.getCenter())<centroid.distanceSquared(postLimitRect.getCenter()))
+				peopleCountEntering++;
+			else
+				peopleCountLeaving++;
+			peopleCurrent.erase(it);
+			return;
+		}
+	}
 }
 
 //--------------------------------------------------------------
@@ -322,6 +348,9 @@ void testApp::draw(){
 	if(doDebug){
 		ofPushMatrix();
 		ofScale(DRAW_SCALE,DRAW_SCALE);
+
+		ofPushMatrix();
+		ofScale((float)PROCESSING_WIDTH/CAMERA_WIDTH,(float)PROCESSING_HEIGHT/CAMERA_HEIGHT);
 		ofSetColor(255);
 #ifdef CRANIO_RPI
 		video.draw();
@@ -329,21 +358,22 @@ void testApp::draw(){
 		if(!calibrationMode)
 			video.draw(0,0);
 #endif
-		ofPushMatrix();
-		ofScale((float)CAMERA_WIDTH/PROCESSING_WIDTH,(float)CAMERA_HEIGHT/PROCESSING_HEIGHT);
+		ofPopMatrix();
+
 		imgBackground.draw(PROCESSING_WIDTH,0);
 		thresholded.draw(0,PROCESSING_HEIGHT);
 		contourFinder.draw(0,PROCESSING_HEIGHT);
 		blobsTracker.draw(0,PROCESSING_HEIGHT);
 		drawAllZones();
-		ofPopMatrix();
+
 		ofPopMatrix();
 
 		stringstream info;
 		info << "APP FPS: " << ofToString(ofGetFrameRate(),2) << "\n";
 		info << "Camera Resolution: " << video.getWidth() << "x" << video.getHeight()	<< " @ "<< CAMERA_FPS <<"FPS"<< "\n";
-		info << "BLOBS: " << contourFinder.nBlobs << "\n";
-		info << "PEOPLE COUNT: " << blobsTracker.count << "\n";
+		info << "CURRENT BLOBS: " << contourFinder.nBlobs << " CURRENT PEOPLE:" << peopleCurrent.size() << "\n";
+		info << "PEOPLE BRUTO: " << blobsTracker.count << " PEOPLE NETO: " << peopleCount << "\n";
+		info << "ENTERING: " << peopleCountEntering << " LEAVING: " << peopleCountLeaving << "\n";
 		info << "DENSITY: Post: " << ofToString(postLimitDensity,2) << ", Pre: " << ofToString(preLimitDensity,2) << "\n";
 		info << "QUEUE COUNTER: " << queueCounter << "\n";
 		info << "\n";
@@ -352,7 +382,7 @@ void testApp::draw(){
 		info << "Press p to Toggle pixel processing" << "\n";
 		info << "Press r to Toggle pixel reloading" << "\n";
 		info << "Press g to Toggle info" << "\n";
-		ofDrawBitmapStringHighlight(info.str(), CAMERA_WIDTH*DRAW_SCALE+10, CAMERA_HEIGHT*DRAW_SCALE+20, ofColor::black, ofColor::yellow);
+		ofDrawBitmapStringHighlight(info.str(), PROCESSING_WIDTH*DRAW_SCALE+10, PROCESSING_HEIGHT*DRAW_SCALE+20, ofColor::black, ofColor::yellow);
 	}
 }
 //--------------------------------------------------------------
@@ -407,6 +437,10 @@ void testApp::keyPressed(int key){
         background.reset();
 	}
 	if(key == 'r'){
+		peopleCount=0;
+		peopleCountEntering=0;
+		peopleCountLeaving=0;
+		peopleCurrent.clear();
 		blobsTracker.reset();
 	}
 	if (key == OF_KEY_UP) {
@@ -435,7 +469,7 @@ void testApp::mouseMoved(int x, int y ){
 
 //--------------------------------------------------------------
 void testApp::mouseDragged(int x, int y, int button){
-	ofPoint mouse((x/DRAW_SCALE-CAMERA_WIDTH)/((float)CAMERA_WIDTH),(y/DRAW_SCALE)/((float)CAMERA_HEIGHT));
+	ofPoint mouse((x/DRAW_SCALE-PROCESSING_WIDTH)/((float)PROCESSING_WIDTH),(y/DRAW_SCALE)/((float)PROCESSING_HEIGHT));
 	if(dragginPoint==0){
 		preLimit.vertex[0].set(mouse);
 		postLimit.vertex[0].set(preLimit.vertex[0]);
@@ -456,7 +490,7 @@ void testApp::mouseDragged(int x, int y, int button){
 
 //--------------------------------------------------------------
 void testApp::mousePressed(int x, int y, int button){
-	ofPoint mouse((x/DRAW_SCALE-CAMERA_WIDTH)/((float)CAMERA_WIDTH),(y/DRAW_SCALE)/((float)CAMERA_HEIGHT));
+	ofPoint mouse((x/DRAW_SCALE-PROCESSING_WIDTH)/((float)PROCESSING_WIDTH),(y/DRAW_SCALE)/((float)PROCESSING_HEIGHT));
 	if(preLimit.vertex[0].distanceSquared(mouse)<0.01f)
 		dragginPoint=0;
 	else if(preLimit.vertex[1].distanceSquared(mouse)<0.01f)

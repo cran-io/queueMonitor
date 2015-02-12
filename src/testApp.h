@@ -63,6 +63,9 @@ class testApp : public ofBaseApp{
     ofxBlobTracker		blobsTracker;
 	ofxCvContourFinder  contourFinder;
 
+	int peopleCount,peopleCountEntering,peopleCountLeaving;
+	vector<int> peopleCurrent;
+
 	void blobAdded(ofxBlob &_blob);
     void blobUpdated(ofxBlob &_blob);
     void blobDeleted(ofxBlob &_blob);

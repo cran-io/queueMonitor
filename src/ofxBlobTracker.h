@@ -207,7 +207,8 @@ public:
 		for(int blobIndex=0;blobIndex<blobs.size();blobIndex++){
 			if(!blobs[blobIndex].updated){
 				if(blobs[blobIndex].life<LIFE_THRESHOLD){
-					ofNotifyEvent(blobDeleted, blobs[blobIndex]);
+					if(blobs[blobIndex].counted)
+						ofNotifyEvent(blobDeleted, blobs[blobIndex]);
 					blobs[blobIndex].deletion=true;
 				}
 				else if(blobs[blobIndex].active){
